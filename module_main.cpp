@@ -5,7 +5,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
-#include <iostream>
+#define LOG(A) std::cout<<A<<std::endl
 
 namespace py = pybind11;
 
@@ -63,16 +63,18 @@ class dcel {
 		std::vector<face*> faces;
 		std::vector<halfedge*> hedges;
 
+	public:
+
 		void buildFromGraph(std::vector<point> V, std::vector<edge> E);
 		void buildDefault(point a, point b);
 
-	public:
 		dcel(std::vector<point> V, std::vector<edge> E) {
-			this->buildFromGraph(V,E);
+			std::cout<<"Im gonna do something!"<<std::endl;
+			buildFromGraph(V,E);
 		}
-		dcel(point a, point b) {
-			this->buildDefault(a,b);
-		}
+//		dcel(point a, point b) {
+//			this->buildDefault(a,b);
+//		}
 
 		//interface
 		py::tuple IF_getGraph ()
@@ -95,18 +97,25 @@ class dcel {
 void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 {
 	//create vertices
+	LOG("Creating vertices!");
 	for (auto v : V)
+	{
+		LOG("("<<v.first<<","<<v.second<<")");
 		vertices.emplace_back(new vertex{v});
+	}
 
 	//create hedges
 	for (auto e : E)
 	{
 		halfedge* h1 = new halfedge;
 		halfedge* h2 = new halfedge;
+
 		h1->origin = vertices.at(e.second);
 		h1->origin->incident.emplace_back(h1);
 		h2->origin = vertices.at(e.first);
 		h2->origin->incident.emplace_back(h2);
+
+		LOG("h-e: ("<<h2->origin->pos.first<<","<<h2->origin->pos.second<<") -> ("<<h1->origin->pos.first<<","<<h1->origin->pos.second<<")");
 
 		h1->twin = h2;
 		h2->twin = h1;
@@ -116,11 +125,22 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 	}
 
 	//link hedges
+	LOG("Creating hedges!");
 	for (auto he : hedges)
 	{
+		LOG("Processing hedge: ("<<he->twin->origin->pos.first<<","<<he->twin->origin->pos.second<<") -> ("<<he->origin->pos.first<<","<<he->origin->pos.second<<")");
+
+		if (he->next != nullptr)
+		{
+			LOG("STATE: LINKED.");
+			continue;
+		}
+
+		LOG("STATE: LINKING...");
 		halfedge* loopPoint = he;
 		halfedge* now = loopPoint;
 
+		int circleSize = 1;
 		do {
 			vertex* nodehub = now->origin;
 			halfedge* closest;
@@ -151,10 +171,16 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 
 			now = now->next;
 
+			LOG("	-> ("<<now->origin->pos.first<<","<<now->origin->pos.second<<")");
+			sleep(1);
+
+			circleSize++;
 		} while (now != loopPoint);
+		LOG("STATE: LINKING COMPLETED. LOOP SIZE "<<circleSize<<"\n");
 	}
 
 	//identify faces
+	LOG("Creating faces!");
 	std::stack<halfedge*> tracer;
 	tracer.push(hedges.front());
 	while (!tracer.empty())
@@ -201,5 +227,5 @@ PYBIND11_MODULE(PyS4DCEL, handle) {
 
 	py::class_<dcel>( handle, "dcel" )
 	        .def(py::init<std::vector<point>, std::vector<edge>>())
-	        .def(py::init<point,point>());
+			.def_property_readonly("G", &dcel::IF_getGraph);
 }
