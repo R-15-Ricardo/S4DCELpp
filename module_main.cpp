@@ -1,14 +1,19 @@
 #include <vector>
+#include <stack>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
+#include <iostream>
+
 namespace py = pybind11;
+
+#define INFTY -1
 
 typedef std::pair<float,float> point;
 typedef std::pair<float,float> vector2f;
-typedef std::pair<int,int> pointIndices;
+typedef std::pair<int,int> edge;
 
 point operator-(point a, point b) {
 	return point(a.first-b.first, a.second-b.second);
@@ -58,19 +63,36 @@ class dcel {
 		std::vector<face*> faces;
 		std::vector<halfedge*> hedges;
 
-		void buildFromGraph(std::vector<point> V, std::vector<pointIndices> E);
+		void buildFromGraph(std::vector<point> V, std::vector<edge> E);
 		void buildDefault(point a, point b);
 
 	public:
-		dcel(std::vector<point> V, std::vector<pointIndices> E) {
+		dcel(std::vector<point> V, std::vector<edge> E) {
 			this->buildFromGraph(V,E);
 		}
 		dcel(point a, point b) {
 			this->buildDefault(a,b);
 		}
+
+		//interface
+		py::tuple IF_getGraph ()
+		{
+			std::vector<point> vertOut;
+			for (auto v : vertices)
+			{
+				vertOut.push_back(v->pos);
+			}
+
+			auto edgeOut = std::vector<std::vector<point>>();
+			for (auto e : hedges)
+				edgeOut.push_back(std::vector<point>({e->origin->pos,e->twin->origin->pos}));
+
+			return py::make_tuple(vertOut,edgeOut);
+		}
+
 };
 
-void dcel::buildFromGraph(std::vector<point> V, std::vector<pointIndices> E)
+void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 {
 	//create vertices
 	for (auto v : V)
@@ -133,12 +155,51 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<pointIndices> E)
 	}
 
 	//identify faces
+	std::stack<halfedge*> tracer;
+	tracer.push(hedges.front());
+	while (!tracer.empty())
+	{
+		halfedge* now = tracer.top();
+		tracer.pop();
+
+		if (now->bounding == nullptr)
+		{
+			//circle the face and indentify
+			face* nFace = new face;
+			nFace->leader = now;
+			now->bounding = nFace;
+			tracer.push(now->twin);
+
+			faces.emplace_back(nFace);
+
+			halfedge* loopPoint = now;
+			halfedge* place = loopPoint->next;
+			while (place != loopPoint)
+			{
+				place->bounding = nFace;
+				tracer.push(place->twin);
+				place = place->next;
+			}
+		}
+	}
+
+	//sanity check
+	if (2 - vertices.size() + (hedges.size()/2) != faces.size())
+		std::cout<<"Fatal error on creation of faces!!!"<<std::endl;
 
 }
 
-
+void dcel::buildDefault(point a, point b)
+{
+	std::vector<point> points = {a,b};
+	std::vector<edge> edges = {edge(INFTY,INFTY)};
+}
 
 
 PYBIND11_MODULE(PyS4DCEL, handle) {
 	handle.doc() = "Cpp DCEL module";
+
+	py::class_<dcel>( handle, "dcel" )
+	        .def(py::init<std::vector<point>, std::vector<edge>>())
+	        .def(py::init<point,point>());
 }

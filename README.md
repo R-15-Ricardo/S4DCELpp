@@ -14,8 +14,13 @@ to python source and import with `import PyS4DCEL`
 # TODO *(cpp class)*:
   * [X] DCEL from graph constructor
   * [X] DCEL default from two points
+  * [ ] Handle points to infinity
   * [ ] `dcel::getFace(point p)` method implementation
   * [ ] `dcel::getBoundry(face& f)` method implementation
   
 # TODO *(pybind11 interface)*
-  * [ ] everyting...
+  * [X] Constructors
+  * [ ] read-only property `vertices`
+  * [ ] read-only property `edges`
+  * [X] read-only property `graph` *(for debug)*
+  * [ ] read-only property `faces`
