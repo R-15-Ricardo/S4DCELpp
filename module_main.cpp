@@ -19,6 +19,10 @@ point operator-(point a, point b) {
 	return point(a.first-b.first, a.second-b.second);
 }
 
+point operator+(point a, point b) {
+	return point(a.first+b.first, a.second+b.second);
+}
+
 template <class T>
 point operator*(T x, point a) {
 	return point(x*a.first, x*a.second);
@@ -63,6 +67,39 @@ struct halfedge {
  	vertex* origin = nullptr;
  	face* bounding = nullptr;
 };
+
+class line {
+	private:
+		vector2f dir = {1,0};
+		vector2f origin = {0,0};
+		int type = 0;
+
+	public:
+		enum lineType {full = 0, segment = 1};
+
+		line();
+		line(vector2f dir_) : dir(dir_), type(lineType::full) {};
+		line(vector2f origin_, vector2f dir_) : dir(dir_), origin(origin_), type(lineType::segment) {};
+		py::array IF_getDrawable() {
+			return py::cast(std::vector<float>({origin.first,origin.second,dir.first,dir.second}));
+		}
+
+		friend py::array IF_intersect(line l1,line l2);
+};
+
+py::array IF_intersect(line l1, line l2)
+{
+	return py::cast(nullptr);
+}
+
+line IF_bisect(point a, point b)
+{
+	point mid = 0.5*(a + b);
+	point dir = b - a;
+	point dirRotate = {-dir.second, dir.first};
+
+	return line(mid, dirRotate);
+}
 
 class dcel {
 	private:
@@ -121,18 +158,18 @@ class dcel {
 			 return id;
 		}
 
-		py::array IF_getFaceBoundry(faceIterator faceId)
+		std::vector<line> IF_getFaceBoundry(faceIterator faceId)
 		{
 			auto boundry = this->getBoundry(*faceId);
-			std::vector<std::vector<float>> hedgeOut;
+			std::vector<line> hedgeOut;
 
 			for (auto e : boundry)
 			{
 				point o = e->twin->origin->pos;
 				point dir = e->origin->pos - o;
-				hedgeOut.push_back(std::vector<float>({o.first,o.second,dir.first,dir.second}));
+				hedgeOut.push_back(line(o,dir));
 			}
-			return py::cast(hedgeOut);
+			return hedgeOut;
 		}
 
 		faceIterator IF_getLandingFace(point p)
@@ -355,6 +392,11 @@ bool dcel::getWinding(face* f)
 
 PYBIND11_MODULE(PyS4DCEL, handle) {
 	handle.doc() = "Cpp DCEL module";
+	handle.def("get_bisector", &IF_bisect);
+
+	py::class_<line>( handle, "line" )
+	        .def(py::init<vector2f, vector2f>())
+			.def_property_readonly("drawable", &line::IF_getDrawable);
 
 	py::class_<dcel>( handle, "dcel" )
 	        .def(py::init<std::vector<point>, std::vector<edge>>())

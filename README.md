@@ -19,7 +19,8 @@ to python source and import with `import PyS4DCEL`
   * [ ] `dcel::splitEdge(halfedge* e)` method implementation
   * [ ] `dcel::joinVertex(vertex* a, vertex* b)` method implementation
   * [ ] `dcel::splitFace(face* f)` method implementation
-  * [ ] Create line class
+  * [X] Create line class
+  * [ ] Line class intersect
   
 # TODO *(pybind11 interface)*
   * [X] Constructors
