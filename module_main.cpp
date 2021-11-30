@@ -54,6 +54,8 @@ struct face {
 	halfedge* leader = nullptr;
 };
 
+typedef std::vector<face*>::iterator faceIterator;
+
 struct halfedge {
 	halfedge* next = nullptr;
 	halfedge* last = nullptr;
@@ -68,13 +70,15 @@ class dcel {
 		std::vector<face*> faces;
 		std::vector<halfedge*> hedges;
 
-	public:
-
 		void buildFromGraph(std::vector<point> V, std::vector<edge> E);
 		void buildDefault(point a, point b);
+		std::vector<halfedge*> getBoundry(face* f);
+		bool testInside(point p, face* f);
+		bool getWinding(face* f);
+
+	public:
 
 		dcel(std::vector<point> V, std::vector<edge> E) {
-			std::cout<<"Im gonna do something!"<<std::endl;
 			buildFromGraph(V,E);
 		}
 //		dcel(point a, point b) {
@@ -84,18 +88,68 @@ class dcel {
 		//interface
 		py::tuple IF_getGraph ()
 		{
-			std::vector<point> vertOut;
+			std::vector<std::vector<float>> vertOut;
 			for (auto v : vertices)
 			{
-				vertOut.push_back(v->pos);
+				vertOut.push_back(std::vector<float>({v->pos.first,v->pos.second}));
 			}
 
-			auto edgeOut = std::vector<std::vector<point>>();
+			std::vector<std::vector<float>> edgeOut;
 			for (auto e : hedges)
-				edgeOut.push_back(std::vector<point>({e->origin->pos,e->twin->origin->pos}));
-
-			return py::make_tuple(vertOut,edgeOut);
+			{
+				point o = e->twin->origin->pos;
+				point dir = e->origin->pos - o;
+				edgeOut.push_back(std::vector<float>({o.first,o.second,dir.first,dir.second}));
+			}
+			py::array out1 = py::cast(vertOut);
+			py::array out2 = py::cast(edgeOut);
+			return py::make_tuple(out1,out2);
 		}
+
+		faceIterator IF_getFacesEnd ()
+		{
+			return this->faces.end();
+		}
+
+		faceIterator IF_getFace (int index)
+		{
+			 faceIterator id = faces.begin();
+			 id += index;
+			 if (id >= faces.end())
+				 throw std::out_of_range("Face does not exist");
+
+			 return id;
+		}
+
+		py::array IF_getFaceBoundry(faceIterator faceId)
+		{
+			auto boundry = this->getBoundry(*faceId);
+			std::vector<std::vector<float>> hedgeOut;
+
+			for (auto e : boundry)
+			{
+				point o = e->twin->origin->pos;
+				point dir = e->origin->pos - o;
+				hedgeOut.push_back(std::vector<float>({o.first,o.second,dir.first,dir.second}));
+			}
+			return py::cast(hedgeOut);
+		}
+
+		faceIterator IF_getLandingFace(point p)
+		{
+			faceIterator unwind = faces.end();
+			for (auto fid = faces.begin(); fid<faces.end(); fid++)
+			{
+				face* f = *fid;
+				if (testInside(p,f)) return fid;
+
+				if (!getWinding(f)) unwind = fid;
+			}
+
+			return unwind;
+		}
+
+
 
 };
 
@@ -248,11 +302,67 @@ void dcel::buildDefault(point a, point b)
 	std::vector<edge> edges = {edge(INFTY,INFTY)};
 }
 
+std::vector<halfedge*> dcel::getBoundry(face* f)
+{
+	std::vector<halfedge*> boundry;
+
+	halfedge* loopstart = f->leader;
+	boundry.push_back(loopstart);
+
+	halfedge* loopPtr = loopstart->next;
+	while (loopPtr != loopstart)
+	{
+		boundry.push_back(loopPtr);
+		loopPtr = loopPtr->next;
+	}
+
+	return boundry;
+}
+
+bool dcel::testInside(point p, face* f)
+{
+	auto boundry = this->getBoundry(f);
+
+	for (auto e : boundry)
+	{
+		point o = e->twin->origin->pos;
+		point a = e->origin->pos;
+
+		vector2f v1 = a-o;
+		vector2f v2 = p-o;
+
+		if (aboveTest(v1,v2) > 0)
+			return false;
+
+	}
+
+	return true;
+}
+
+bool dcel::getWinding(face* f)
+{
+	halfedge* lead = f->leader;
+	point A = lead->last->twin->origin->pos;
+	point B = lead->last->origin->pos;
+	point C = lead->origin->pos;
+
+	vector2f v1 = A-B;
+	vector2f v2 = C-B;
+
+	return (aboveTest(v1,v2) > 0);
+}
+
 
 PYBIND11_MODULE(PyS4DCEL, handle) {
 	handle.doc() = "Cpp DCEL module";
 
 	py::class_<dcel>( handle, "dcel" )
 	        .def(py::init<std::vector<point>, std::vector<edge>>())
-			.def_property_readonly("G", &dcel::IF_getGraph);
+			.def("get_face", &dcel::IF_getFace)
+			.def("get_boundry", &dcel::IF_getFaceBoundry)
+			.def("landing_face", &dcel::IF_getLandingFace)
+			.def_property_readonly("G", &dcel::IF_getGraph)
+			.def_property_readonly("no_face", &dcel::IF_getFacesEnd);
+
+	py::class_<faceIterator>(handle, "faceId");
 }

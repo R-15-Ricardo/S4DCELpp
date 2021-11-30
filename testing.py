@@ -4,12 +4,32 @@ sys.path.append("/home/ric/Documents/Escuela/7mo_semestre/CompGeo/Tarea3/Modules
 import PyS4DCEL as dcel
 
 class TestDCEL(unittest.TestCase):
-    def test_something(self):
+    def test_constructor(self):
         V = [(-7,2),(-4,6),(2,4),(-3,2),(-1,0),(5,-1)]
         E = [(0,1),(1,2),(2,3),(4,3),(5,2),(4,5),(0,3)]
-        test = dcel.dcel(V,E)
-        print(test)
-        self.assertIsNotNone(test)
+        testdcel = dcel.dcel(V,E)
+        print(testdcel)
+        self.assertIsNotNone(testdcel)
+
+        fid = testdcel.get_face(0)
+        print(fid)
+        self.assertIsNotNone(fid)
+
+        bound = testdcel.get_boundry(fid)
+        print(bound)
+        self.assertIsNotNone(bound)
+
+        points = [(-3.26,3.88),(1.58,1.19),(3.01,6.75)]
+        #points = [(1.58,1.19)]
+        nohit = testdcel.no_face
+        print(nohit)
+        for p in points:
+            lfid = testdcel.landing_face(p)
+            self.assertNotEqual(lfid,testdcel.no_face,"No landing detected")
+
+            lbound = testdcel.get_boundry(lfid)
+            print(lbound)
+
 
 
 if __name__ == '__main__':
