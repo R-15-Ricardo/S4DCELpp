@@ -26,12 +26,17 @@ point operator*(T x, point a) {
 
 float abs(vector2f p)
 {
-	return sqrt(p.first*p.first + p.second*p.second);
+	return std::sqrt(p.first*p.first + p.second*p.second);
 }
 
 float dot(vector2f a, vector2f b)
 {
 	return a.first*b.first + a.second*b.second;
+}
+
+int aboveTest(vector2f a, vector2f b)
+{
+	return ((a.first*b.second - a.second*b.first) > 0) ? 1 : -1;
 }
 
 
@@ -140,29 +145,51 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 		halfedge* loopPoint = he;
 		halfedge* now = loopPoint;
 
-		int circleSize = 1;
+		int circleSize = 0;
 		do {
+			LOG("	FINDING CIRCLE STEP");
 			vertex* nodehub = now->origin;
 			halfedge* closest;
 			float closestAngle = 1e300;
-
+			float closetSide = -1;
 		//  quick mafs to get least angle
 		//  [----------------------------------
 			point o = nodehub->pos;
+			LOG("		NODE: ("<<o.first<<","<<o.second<<")");
+
 			point a = now->twin->origin->pos;
-			vector2f v1 = (1.0/abs(a-o))*a-o;
+			LOG("		T-NEIGHBOR: ("<<a.first<<","<<a.second<<")");
+
+			vector2f v1 = (1.0/abs(a-o))*(a-o);
 
 			for (auto incident : nodehub->incident)
 			{
-				point p = incident->twin->origin->pos;
-				vector2f v2 = (1.0/abs(p-o))*p-o;
-				float angle = dot(v1,v2);
+				if (incident == now || incident->twin->last != nullptr) continue;
 
+				point p = incident->twin->origin->pos;
+				LOG("		NEIGHBOR: ("<<p.first<<","<<p.second<<")");
+
+				vector2f v2 = (1.0/abs(p-o))*(p-o);
+				int side = aboveTest(v1,v2);
+				LOG("			side: "<<side);
+
+				float angle = ((-1*side)*dot(v1,v2) + 1)/2.0;
+				LOG("			cos(Θ): "<<angle);
+
+
+
+
+				if (side > closetSide)
+				{
+					closetSide = side;
+					closestAngle = 1e300;
+				}
 				if (angle < closestAngle)
 				{
 					closestAngle = angle;
 					closest = incident;
 				}
+
 			}
 		//	----------------------------------]
 
@@ -172,7 +199,7 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 			now = now->next;
 
 			LOG("	-> ("<<now->origin->pos.first<<","<<now->origin->pos.second<<")");
-			sleep(1);
+			//sleep(1);
 
 			circleSize++;
 		} while (now != loopPoint);
