@@ -329,7 +329,10 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 
 	//sanity check
 	if (2 - vertices.size() + (hedges.size()/2) != faces.size())
+	{
 		std::cout<<"Fatal error on creation of faces!!!"<<std::endl;
+		throw std::runtime_error("Couldn't identify faces correctly.");
+	}
 
 }
 
