@@ -40,7 +40,7 @@ float dot(vector2f a, vector2f b)
 
 int aboveTest(vector2f a, vector2f b)
 {
-	return ((a.first*b.second - a.second*b.first) > 0) ? 1 : -1;
+	return ((a.first*b.second - a.second*b.first) >= 0) ? 1 : -1;
 }
 
 
@@ -185,8 +185,6 @@ class dcel {
 
 			return unwind;
 		}
-
-
 
 };
 
