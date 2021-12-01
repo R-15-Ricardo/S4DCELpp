@@ -13,6 +13,9 @@ namespace py = pybind11;
 
 typedef std::pair<float,float> point;
 typedef std::pair<float,float> vector2f;
+
+typedef std::pair<bool, point> intersection;
+
 typedef std::pair<int,int> edge;
 
 point operator-(point a, point b) {
@@ -38,9 +41,14 @@ float dot(vector2f a, vector2f b)
 	return a.first*b.first + a.second*b.second;
 }
 
+float cross(vector2f a, vector2f b)
+{
+	return (a.first*b.second - a.second*b.first);
+}
+
 int aboveTest(vector2f a, vector2f b)
 {
-	return ((a.first*b.second - a.second*b.first) >= 0) ? 1 : -1;
+	return (cross(a,b) >= 0) ? 1 : -1;
 }
 
 
@@ -74,12 +82,18 @@ class line {
 		vector2f origin = {0,0};
 		int type = 0;
 
+		friend intersection checkIntersection(line l1,line l2);
+		friend line getBisector (point a, point b);
+
 	public:
 		enum lineType {full = 0, segment = 1};
-
-		line();
-		line(vector2f dir_) : dir(dir_), type(lineType::full) {};
-		line(vector2f origin_, vector2f dir_) : dir(dir_), origin(origin_), type(lineType::segment) {};
+		line(vector2f origin_, vector2f dir_, std::string type) : dir(dir_), origin(origin_)
+		{
+			if (type == "full") type = lineType::full;
+			else if (type == "segment") type = lineType::segment;
+			else
+				throw std::invalid_argument("Non-valid line type");
+		}
 		py::array IF_getDrawable() {
 			return py::cast(std::vector<float>({origin.first,origin.second,dir.first,dir.second}));
 		}
@@ -87,18 +101,80 @@ class line {
 		friend py::array IF_intersect(line l1,line l2);
 };
 
-py::array IF_intersect(line l1, line l2)
+intersection checkIntersection (line l1, line l2)
 {
-	return py::cast(nullptr);
+	vector2f A = l2.origin - l1.origin;
+	float B = cross(l1.dir, l2.dir);
+
+	if (B == 0)
+		return intersection({false, point()});
+
+	float tl1 = cross(A,l2.dir)/B;
+	float tl2 = cross(A,l1.dir)/B;
+
+	// line - segment
+	point inter;
+
+	if (l1.type != l2.type)
+	{
+		int seg = (l1.type == line::lineType::segment) ? 1 : 2;
+		inter = l1.origin + tl1*l1.dir;
+
+		switch (seg) {
+			case 1:
+				if (0 <= tl1 && tl1 <= 1)
+					return intersection ({true,inter});
+
+			case 2:
+				if (0 <= tl2 && tl2 <= 1)
+					return intersection ({true,inter});
+		}
+		return intersection({false,point()});
+	}
+	else
+	{
+		switch (l1.type) {
+			//line - line
+			case line::lineType::full:
+				inter = l1.origin + tl1*l1.dir;
+				return intersection ({true,inter});
+
+				//segment - segment
+			case line::lineType::segment:
+				if ((0<=tl1 && tl1<=1) && (0<=tl2 && tl2<=1))
+				{
+					inter = l1.origin + tl1*l1.dir;
+					return intersection ({true,inter});
+				}
+				return intersection({false,point()});
+		}
+	}
+
+	return intersection({false,point()});
 }
 
-line IF_bisect(point a, point b)
+line getBisector (point a, point b)
 {
 	point mid = 0.5*(a + b);
 	point dir = b - a;
 	point dirRotate = {-dir.second, dir.first};
 
-	return line(mid, dirRotate);
+	return line(mid, dirRotate, "full");
+}
+
+py::array IF_intersect(line l1, line l2)
+{
+	intersection interPoint = checkIntersection(l1,l2);
+
+	if (!interPoint.first)
+		return py::cast(nullptr);
+
+	return py::cast(std::vector<float>({interPoint.second.first, interPoint.second.first}));
+}
+
+line IF_bisect(point a, point b)
+{
+	return getBisector(a,b);
 }
 
 class dcel {
@@ -167,7 +243,7 @@ class dcel {
 			{
 				point o = e->twin->origin->pos;
 				point dir = e->origin->pos - o;
-				hedgeOut.push_back(line(o,dir));
+				hedgeOut.push_back(line(o,dir,"segment"));
 			}
 			return hedgeOut;
 		}
@@ -394,9 +470,10 @@ bool dcel::getWinding(face* f)
 PYBIND11_MODULE(PyS4DCEL, handle) {
 	handle.doc() = "Cpp DCEL module";
 	handle.def("get_bisector", &IF_bisect);
+	handle.def("get_intersection", &IF_intersect);
 
 	py::class_<line>( handle, "line" )
-	        .def(py::init<vector2f, vector2f>())
+	        .def(py::init<vector2f, vector2f, std::string>())
 			.def_property_readonly("drawable", &line::IF_getDrawable);
 
 	py::class_<dcel>( handle, "dcel" )
