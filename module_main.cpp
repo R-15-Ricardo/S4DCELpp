@@ -102,6 +102,7 @@ class line {
 		friend py::array IF_intersect(line l1,line l2);
 };
 
+
 intersection checkIntersection (line l1, line l2)
 {
 	vector2f A = l2.origin - l1.origin;
@@ -193,6 +194,9 @@ class dcel {
         void VertexOnEdge(point x, halfedge *e);
         void EdgeDivideFace(halfedge *h_1, halfedge *h_2);
         void DeleteInsideNewFace(std::vector<halfedge*> boundNewFace);
+
+        template<class T>
+        void RemoveItemFromVec(std::vector<T> list, T item);
 
 	public:
 
@@ -486,6 +490,17 @@ bool dcel::getWinding(face* f)
 }
 
 // Operaciones con el DCEL
+template<typename T>
+void dcel::RemoveItemFromVec(std::vector<T> list, T item)
+{
+    for (auto nowV = list.begin(); nowV != list.end(); nowV++)
+        if(*nowV == item)
+        {
+            list.erase(nowV);
+            break;
+        }
+}
+
 void dcel::VertexOnEdge(point x, halfedge *e)
 {
     vertex* new_vert;    this->vertices.emplace_back(new_vert);
@@ -510,7 +525,7 @@ void dcel::VertexOnEdge(point x, halfedge *e)
     e->next->last = new_hed_2;
 
     e->origin->incident.emplace_back(new_hed_2);
-    //e->origin->incident.remove(e);
+    this->RemoveItemFromVec(e->origin->incident, e);
 
 
     halfedge* e_twin = e->twin;
@@ -534,7 +549,7 @@ void dcel::VertexOnEdge(point x, halfedge *e)
     e_twin->next->last = twi_hed_2;
 
     e_twin->origin->incident.emplace_back(twi_hed_2);
-    //e_twin->origin->incident.remove(e_twin);
+    this->RemoveItemFromVec(e_twin->origin->incident, e_twin);
 
 
     if (e->bounding->leader == e)
@@ -545,7 +560,8 @@ void dcel::VertexOnEdge(point x, halfedge *e)
 
     delete e;
     delete e_twin;
-    // TODO: Borrar las media-aristas de `this->hedges`.
+    this->RemoveItemFromVec(this->hedges, e);
+    this->RemoveItemFromVec(this->hedges, e_twin);
 }
 
 
@@ -599,7 +615,7 @@ void dcel::EdgeDivideFace(halfedge *h_1, halfedge *h_2)
     }
 
     delete faceToDelete;
-    // TODO: Borrar la cara de `this->faces`.
+    this->RemoveItemFromVec(this->faces, faceToDelete);
 }
 
 void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
@@ -635,13 +651,21 @@ void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
             facesToDelete.insert(h->bounding);
         }
 
-    // TODO: Borrarlos también del `this->{vertices,faces,hedges}`.
     for (auto vertToDel : vertInsideFace)
+    {
         delete vertToDel;
+        this->RemoveItemFromVec(this->vertices, vertToDel);
+    }
     for (auto hedgToDel : hedgeToDelete)
+    {
         delete hedgToDel;
+        this->RemoveItemFromVec(this->hedges, hedgToDel);
+    }
     for (auto faceToDel : facesToDelete)
+    {
         delete faceToDel;
+        this->RemoveItemFromVec(this->faces, faceToDel);
+    }
 
     for (auto newHedg : boundNewFace)
     {
