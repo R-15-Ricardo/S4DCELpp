@@ -79,9 +79,9 @@ struct halfedge {
 
 class line {
 	private:
-		vector2f dir = {1,0};
-		vector2f origin = {0,0};
-		int type = 0;
+		vector2f dir;
+		vector2f origin;
+		int type;
 
 		friend intersection checkIntersection(line l1,line l2);
 		friend line getBisector (point a, point b);
@@ -90,8 +90,8 @@ class line {
 		enum lineType {full = 0, segment = 1};
 		line(vector2f origin_, vector2f dir_, std::string type) : dir(dir_), origin(origin_)
 		{
-			if (type == "full") type = lineType::full;
-			else if (type == "segment") type = lineType::segment;
+			if (type == "full") this->type = lineType::full;
+			else if (type == "segment") this->type = lineType::segment;
 			else
 				throw std::invalid_argument("Non-valid line type");
 		}
@@ -99,7 +99,7 @@ class line {
 			return py::cast(std::vector<float>({origin.first,origin.second,dir.first,dir.second}));
 		}
 
-		friend py::array IF_intersect(line l1,line l2);
+		friend py::object IF_intersect(line l1,line l2);
 };
 
 
@@ -164,14 +164,15 @@ line getBisector (point a, point b)
 	return line(mid, dirRotate, "full");
 }
 
-py::array IF_intersect(line l1, line l2)
+py::object IF_intersect(line l1, line l2)
 {
 	intersection interPoint = checkIntersection(l1,l2);
 
 	if (!interPoint.first)
-		return py::cast(nullptr);
+		return py::none();
 
-	return py::cast(std::vector<float>({interPoint.second.first, interPoint.second.first}));
+	py::array arrOut = py::cast(std::vector<float>({interPoint.second.first, interPoint.second.second}));
+	return arrOut;
 }
 
 line IF_bisect(point a, point b)
