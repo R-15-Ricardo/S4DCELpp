@@ -321,6 +321,22 @@ class dcel {
             return fullEdge({piece,piece->twin});
         }
 
+		std::vector<fullEdge> follow(hedgeId eId)
+		{
+			halfedge* loopPtr = eId.loc;
+			face* hand = loopPtr->bounding;
+
+			std::vector<fullEdge> lead;
+
+			while (loopPtr->bounding == hand)
+			{
+				lead.push_back(fullEdge({loopPtr, loopPtr->twin}));
+				loopPtr = loopPtr->next;
+			}
+
+			return lead;
+		}
+
         void IF_deleteInsideNewFace(std::vector<fullEdge> boundry, faceId hint)
         {
 			std::vector<halfedge*> boundNewFace;
@@ -849,6 +865,7 @@ PYBIND11_MODULE(PyS4DCEL, handle) {
 			.def("get_face_data", &dcel::IF_getFaceData)
 			.def("get_boundry", &dcel::IF_getFaceBoundry)
 			.def("landing_face", &dcel::IF_getLandingFace)
+			.def("follow_edge", &dcel::follow)
 			.def("split_face", &dcel::IF_splitFace)
 			.def("split_edge", &dcel::IF_splitEdgeOnPoint)
 			.def("delete_interior", &dcel::IF_deleteInsideNewFace)
