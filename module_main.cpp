@@ -639,31 +639,29 @@ void dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
     e_2->next = h_1->next;
     e_2->next->last = e_2;
     e_2->last = h_2;
+
+	halfedge* auxh_2next = h_2->next;
     e_2->last->next = e_2;
 
-    halfedge* next = e_2;
-    while (true)
-    {
-        next->bounding = f_2;
-        if (next->origin == v)
-            break;
-        next = next->next;
-    }
+    halfedge* loopStart = e_2;
+	halfedge* loopPtr = loopStart;
+	do {
+        loopPtr->bounding = f_2;
+        loopPtr = loopPtr->next;
+    } while (loopStart != loopPtr);
 
 
-    e_1->next = h_2->next;
+    e_1->next = auxh_2next;
     e_1->next->last = e_1;
     e_1->last = h_1;
     e_1->last->next = e_1;
 
-    next = e_1;
-    while (true)
-    {
-        next->bounding = f_1;
-        if (next->origin == u)
-            break;
-        next = next->next;
-    }
+	loopStart = e_1;
+	loopPtr = loopStart;
+	do {
+		loopPtr->bounding = f_1;
+		loopPtr = loopPtr->next;
+	} while (loopStart != loopPtr);
 
     this->RemoveItemFromVec(this->faces, faceToDelete);
 	delete faceToDelete;

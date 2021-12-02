@@ -20,13 +20,13 @@ class TestDCEL(unittest.TestCase):
         print(bound)
         self.assertIsNotNone(bound)
 
-        points = [(-3.26,3.88),(1.58,1.19),(3.01,6.75)]
-        #points = [(1.58,1.19)]
-        for p in points:
-            lfid = testdcel.landing_face(p)
-
-            lbound = testdcel.get_boundry(lfid)
-            print(lbound)
+        # points = [(-3.26,3.88),(1.58,1.19),(3.01,6.75)]
+        # #points = [(1.58,1.19)]
+        # for p in points:
+        #     lfid = testdcel.landing_face(p)
+        #
+        #     lbound = testdcel.get_boundry(lfid)
+        #     print(lbound)
 
     def test_line(self):
         V = [(-7,2),(-4,6),(2,4),(-3,2),(-1,0),(5,-1)]
@@ -58,11 +58,17 @@ class TestDCEL(unittest.TestCase):
 
         print("EEEEE")
 
-        split_point = testdcel.split_edge(tuple(intersections[0]), to_split[0])
-        print(split_point)
+        to_join = []
+        i = 0
+        for p in intersections:
+            to_join.append(testdcel.split_edge(tuple(p), to_split[i]))
+            i+=1
 
+        testdcel.split_face(fid,to_join[0],to_join[1])
         store = testdcel.G
-        print(store)
+
+        fid = testdcel.landing_face(point)
+        print(fid)
 
 
 
