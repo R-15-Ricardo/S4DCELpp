@@ -74,6 +74,11 @@ struct halfedge {
  	face* bounding = nullptr;
 };
 
+struct fullEdge {
+	halfedge* h1;
+	halfedge* h2;
+};
+
 struct vertexId {
 	vertex* loc;
 };
@@ -114,6 +119,10 @@ class line {
 
 		hedgeId IF_getHedgeId() {
 			return this->boundryId;
+		}
+
+		fullEdge IF_getFullEdge() {
+			return fullEdge({this->boundryId.loc,this->boundryId.loc->twin});
 		}
 
 		friend py::object IF_intersect(line l1,line l2);
@@ -210,7 +219,7 @@ class dcel {
 		bool getWinding(face* f);
         
         vertex* VertexOnEdge(point x,  hedgeId eId);
-        void splitFace(faceId fId, vertexId u, vertexId v);
+        halfedge* splitFace(faceId fId, vertexId u, vertexId v);
         void DeleteInsideNewFace(std::vector<halfedge*> boundNewFace);
 
         std::pair<faceId, faceId> facesTouchingLine(hedgeId);
@@ -248,6 +257,22 @@ class dcel {
 			py::array out1 = py::cast(vertOut);
 			py::array out2 = py::cast(edgeOut);
 			return py::make_tuple(out1,out2);
+		}
+
+		faceId IF_traverseFace(faceId fId, fullEdge throught)
+		{
+			face* f = fId.loc;
+			return (throught.h1->bounding == f) ? faceId({throught.h2->bounding}) : faceId({throught.h1->bounding});
+		}
+
+		py::array IF_getFaceData(faceId fId)
+		{
+			return py::cast(std::vector<float>(fId.loc->data.first,fId.loc->data.second));
+		}
+
+		void IF_setFaceData(faceId fId, point newData)
+		{
+			fId.loc->data = newData;
 		}
 
 		faceId IF_getFace (int index)
@@ -290,19 +315,30 @@ class dcel {
             return vertexId({this->VertexOnEdge(x, eId)});
         }
 
-        void IF_splitFace(faceId fId, vertexId v, vertexId u)
+        fullEdge IF_splitFace(faceId fId, vertexId v, vertexId u)
         {
-            this->splitFace(fId,u,v);
+			halfedge* piece = this->splitFace(fId,u,v);
+            return fullEdge({piece,piece->twin});
         }
 
-        void IF_deleteInsideNewFace(std::vector<line> boundry)
+        void IF_deleteInsideNewFace(std::vector<fullEdge> boundry, faceId hint)
         {
 			std::vector<halfedge*> boundNewFace;
+
+			face* nowHint = hint.loc;
+
 			for (auto e : boundry)
 			{
-				halfedge* he = e.IF_getHedgeId().loc;
-				boundNewFace.push_back(he);
+				halfedge* choosen;
+				if (e.h1->bounding == nowHint) choosen = e.h1;
+				else if (e.h2->bounding == nowHint) choosen = e.h2;
+				else
+					throw std::runtime_error("Hint does not match first edge.");
+
+				nowHint = choosen->next->twin->bounding;
+				boundNewFace.push_back(choosen);
 			}
+
             this->DeleteInsideNewFace(boundNewFace);
         }
 
@@ -544,6 +580,13 @@ vertex* dcel::VertexOnEdge(point x, hedgeId eId)
 {
 	halfedge* e = eId.loc;
 
+	//non-duplicate vertices
+	if (abs(e->origin->pos - x) < 0.000000000001)
+		return e->origin;
+
+	if (abs(e->twin->origin->pos - x) < 0.000000000001)
+		return e->twin->origin;
+
     vertex* new_vert = new vertex;    this->vertices.emplace_back(new_vert);
     halfedge* new_hed_1 = new halfedge; this->hedges.emplace_back(new_hed_1);
     halfedge* new_hed_2 = new halfedge; this->hedges.emplace_back(new_hed_2);
@@ -614,7 +657,7 @@ vertex* dcel::VertexOnEdge(point x, hedgeId eId)
 }
 
 
-void dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
+halfedge* dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
 {
 	vertex* u = v1.loc;
 	vertex* v = v2.loc;
@@ -687,11 +730,13 @@ void dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
 
     this->RemoveItemFromVec(this->faces, faceToDelete);
 	delete faceToDelete;
+
+	return e_1;
 }
 
 void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
 {
-    face* newFace;      this->faces.emplace_back(newFace);
+    face* newFace = new face;      this->faces.emplace_back(newFace);
     newFace->leader = boundNewFace.at(0);
 
     size_t n = boundNewFace.size();
@@ -706,37 +751,40 @@ void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
     boundNewFace.at(n - 1)->last = boundNewFace.at(n - 2);
     boundNewFace.at(n - 1)->next = boundNewFace.at(0);
 
+	std::vector<vertex*> vertexOnBoundry;
+	for (auto he : boundNewFace)
+		vertexOnBoundry.push_back(he->origin);
+
     std::vector<vertex*> vertInsideFace;
     for (auto v : this->vertices)
-        if (this->testInside(v->pos, newFace))
+	{
+		if (this->testInside(v->pos, newFace) && (std::find(vertexOnBoundry.begin(), vertexOnBoundry.end(), v) == vertexOnBoundry.end()))
             vertInsideFace.push_back(v);
-    // TODO: Creo que lo anterior también inserta los vértices de la nueva cara
-    // :((.
+	}
 
-    std::vector<halfedge*> hedgeToDelete;
-    std::set<face*> facesToDelete;
     for (auto v : vertInsideFace)
+	{
         for (auto h : v->incident)
         {
-            hedgeToDelete.push_back(h);
-            facesToDelete.insert(h->bounding);
+			halfedge* up = h;
+			halfedge* down = h->twin;
+			face* upBound = up->bounding;
+
+			if (std::find(vertexOnBoundry.begin(), vertexOnBoundry.end(), down->origin) != vertexOnBoundry.end())
+				this->RemoveItemFromVec(down->origin->incident, down);
+
+			this->RemoveItemFromVec(this->hedges, up);
+			this->RemoveItemFromVec(this->faces, upBound);
+			this->RemoveItemFromVec(this->hedges, down);
+
+			delete upBound;
+			delete up;
+			delete down;
         }
 
-    for (auto vertToDel : vertInsideFace)
-    {
-        this->RemoveItemFromVec(this->vertices, vertToDel);
-		delete vertToDel;
-    }
-    for (auto hedgToDel : hedgeToDelete)
-    {
-        this->RemoveItemFromVec(this->hedges, hedgToDel);
-		delete hedgToDel;
-    }
-    for (auto faceToDel : facesToDelete)
-    {
-        this->RemoveItemFromVec(this->faces, faceToDel);
-		delete faceToDel;
-    }
+		this->RemoveItemFromVec(this->vertices, v);
+		delete v;
+	}
 
     for (auto newHedg : boundNewFace)
     {
@@ -790,20 +838,26 @@ PYBIND11_MODULE(PyS4DCEL, handle) {
 	py::class_<line>( handle, "line" )
 	        .def(py::init<vector2f, vector2f, std::string>())
 			.def_property_readonly("drawable", &line::IF_getDrawable)
+			.def_property_readonly("edge_id", &line::IF_getFullEdge)
 			.def_property_readonly("on_bound_id", &line::IF_getHedgeId);
 
 	py::class_<dcel>( handle, "dcel" )
 	        .def(py::init<std::vector<point>, std::vector<edge>>())
 			.def("get_face", &dcel::IF_getFace)
+			.def("step_over_edge", &dcel::IF_traverseFace)
+			.def("set_face_data", &dcel::IF_setFaceData)
+			.def("get_face_data", &dcel::IF_getFaceData)
 			.def("get_boundry", &dcel::IF_getFaceBoundry)
 			.def("landing_face", &dcel::IF_getLandingFace)
-			.def("split_edge", &dcel::IF_splitEdgeOnPoint)
 			.def("split_face", &dcel::IF_splitFace)
+			.def("split_edge", &dcel::IF_splitEdgeOnPoint)
 			.def("delete_interior", &dcel::IF_deleteInsideNewFace)
 			.def_property_readonly("G", &dcel::IF_getGraph)
             .def("faces_touch_line", &dcel::IF_facesTouchingLine)
             .def("is_a_vert", &dcel::IF_isThisAVert)
             .def("are_faces_eq", &dcel::IF_areFacesEqual);
+
+	py::class_<fullEdge>(handle, "edge");
 
 	py::class_<faceId>(handle, "faceId");
 	py::class_<hedgeId>(handle, "edgeId");
