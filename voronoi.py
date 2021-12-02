@@ -30,13 +30,15 @@ def main(sites: np.ndarray):
     sites_already_visited = list()
     sites_already_visited.append(sites[0])
 
-    faces_to_divide = dict()
-
     # Por cada nuevo sitio, actualizaremos el diagrama de Voronoi.
     for i in range(1, len(sites)):
-        new_site     = sites[i]
+        new_site        = sites[i]
+        faces_to_divide = dict()
 
-        facesExplored  = set()
+        # Conforme encntremos las intersecciones usando bisectores, guardaremos
+        # las caras vecinas. Esto lo repetiremos hasta que las intersecciones
+        # dejen de tocar una arista que toca una cara no explorada.
+        facesExplored  = list()
         facesToExplore = list()
 
         # Siempre comenzamos con la cara en la que cae nuestro nuevo sitio.
@@ -44,21 +46,25 @@ def main(sites: np.ndarray):
 
         while facesToExplore:
             fid = facesToExplore.pop()
+            facesExplored.append(fid)
             landing_site = None
 
             # Buscaremos a cuál sitio le pertenecía la cara anteriormente.
             for sit in sites_already_visited:
-                if ourVoronoi.landing_face(sit) == fid:
+                if ourVoronoi.are_faces_eq(ourVoronoi.landing_face(sit), fid):
                     landing_site = sit
                     break
             # TODO: Lo anterior no es muy eficiente. ¿Habrá alguna manera de guardar
             # el sitio de Voronoi para cada cara? Es necesario ir actualizando la
             # cara a la que pertenece cada sitio.
+            # TODO: No toma ninguna cara cuando un vértice está justo encima de una
+            # arista.
 
             if landing_site is None:
                 continue
 
-            # Podemos calcular el bisector y dividiremos la cara.
+            # Podemos calcular el bisector y guardaremos los datos para, más
+            # adelante, poder dividir la cara.
             bisector = pdcl.get_bisector(new_site, landing_site)
             bound    = ourVoronoi.get_boundry(fid)
             intersec = []
@@ -71,9 +77,10 @@ def main(sites: np.ndarray):
                     to_split.append(line.on_bound_id)
 
                     face_a, face_b = ourVoronoi.faces_touch_line(line.on_bound_id)
-                    facesToExplore.append(face_a)
-                    facesToExplore.append(face_b)
-                    facesExplored.add(fid)
+                    if not pdcl.is_face_inside_list(face_a, facesToExplore + facesExplored):
+                        facesToExplore.append(face_a)
+                    if not pdcl.is_face_inside_list(face_b, facesToExplore + facesExplored):
+                        facesToExplore.append(face_b)
 
             faces_to_divide[fid] = (intersec[:], to_split[:])
 
@@ -82,8 +89,10 @@ def main(sites: np.ndarray):
             to_join = []
 
             for i, p in enumerate(inter):
-                isAVert, vertId = ourVoronoi.is_a_vert(inter[0], inter[1])
+                isAVert, vertId = ourVoronoi.is_a_vert(p[0], p[1])
 
+                # En caso de que el vértice que intentamos crear, ya existe,
+                # simplemente lo tomamos sin crear uno nuevo.
                 if isAVert:
                     to_join.append(vertId)
                 else:
@@ -92,6 +101,10 @@ def main(sites: np.ndarray):
             ourVoronoi.split_face(f, to_join[0], to_join[1])
 
         # TODO: Eliminar lo que hay dentro de las caras D:.
+
+        sites_already_visited.append(new_site)
+
+    return ourVoronoi.G
 
 
 if __name__ == "__main__":

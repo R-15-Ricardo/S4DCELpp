@@ -215,6 +215,7 @@ class dcel {
 
         std::pair<faceId, faceId> facesTouchingLine(hedgeId);
         vertexId isThisAVert(point);
+        bool areFacesEqual(faceId, faceId);
 
         template<class T>
         void RemoveItemFromVec(std::vector<T>& list, T item);
@@ -316,6 +317,11 @@ class dcel {
             vertexId result = this->isThisAVert(point({x, y}));
 
             return py::make_tuple(result.loc == nullptr ? false : true, result);
+        }
+
+        bool IF_areFacesEqual(faceId f1, faceId f2)
+        {
+            return this->areFacesEqual(f1, f2);
         }
 };
 
@@ -760,11 +766,26 @@ vertexId dcel::isThisAVert(point p)
     return vertexId({nullptr});
 }
 
+bool dcel::areFacesEqual(faceId f1, faceId f2)
+{
+    return f1.loc == f2.loc;
+}
+
+bool IF_isFaceInsideVec(faceId face_to_check, std::vector<faceId> faces)
+{
+    for (auto f : faces)
+        if (face_to_check.loc == f.loc)
+            return true;
+
+    return false;
+}
+
 
 PYBIND11_MODULE(PyS4DCEL, handle) {
 	handle.doc() = "Cpp DCEL module";
 	handle.def("get_bisector", &IF_bisect);
 	handle.def("get_intersection", &IF_intersect);
+	handle.def("is_face_inside_list", &IF_isFaceInsideVec);
 
 	py::class_<line>( handle, "line" )
 	        .def(py::init<vector2f, vector2f, std::string>())
@@ -781,7 +802,8 @@ PYBIND11_MODULE(PyS4DCEL, handle) {
 			.def("delete_interior", &dcel::IF_deleteInsideNewFace)
 			.def_property_readonly("G", &dcel::IF_getGraph)
             .def("faces_touch_line", &dcel::IF_facesTouchingLine)
-            .def("is_a_vert", &dcel::IF_isThisAVert);
+            .def("is_a_vert", &dcel::IF_isThisAVert)
+            .def("are_faces_eq", &dcel::IF_areFacesEqual);
 
 	py::class_<faceId>(handle, "faceId");
 	py::class_<hedgeId>(handle, "edgeId");
