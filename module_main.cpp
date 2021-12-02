@@ -267,7 +267,7 @@ class dcel {
 
 		py::array IF_getFaceData(faceId fId)
 		{
-			return py::cast(std::vector<float>(fId.loc->data.first,fId.loc->data.second));
+			return py::cast(std::vector<float>({fId.loc->data.first,fId.loc->data.second}));
 		}
 
 		void IF_setFaceData(faceId fId, point newData)
@@ -380,10 +380,8 @@ class dcel {
 void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 {
 	//create vertices
-	LOG("Creating vertices!");
 	for (auto v : V)
 	{
-		LOG("("<<v.first<<","<<v.second<<")");
 		vertices.emplace_back(new vertex{v});
 	}
 
@@ -398,7 +396,6 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 		h2->origin = vertices.at(e.first);
 		h2->origin->incident.emplace_back(h2);
 
-		LOG("h-e: ("<<h2->origin->pos.first<<","<<h2->origin->pos.second<<") -> ("<<h1->origin->pos.first<<","<<h1->origin->pos.second<<")");
 
 		h1->twin = h2;
 		h2->twin = h1;
@@ -408,24 +405,19 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 	}
 
 	//link hedges
-	LOG("Creating hedges!");
 	for (auto he : hedges)
 	{
-		LOG("Processing hedge: ("<<he->twin->origin->pos.first<<","<<he->twin->origin->pos.second<<") -> ("<<he->origin->pos.first<<","<<he->origin->pos.second<<")");
 
 		if (he->next != nullptr)
 		{
-			LOG("STATE: LINKED.");
 			continue;
 		}
 
-		LOG("STATE: LINKING...");
 		halfedge* loopPoint = he;
 		halfedge* now = loopPoint;
 
 		int circleSize = 0;
 		do {
-			LOG("	FINDING CIRCLE STEP");
 			vertex* nodehub = now->origin;
 			halfedge* closest;
 			float closestAngle = 1e300;
@@ -433,10 +425,8 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 		//  quick mafs to get least angle
 		//  [----------------------------------
 			point o = nodehub->pos;
-			LOG("		NODE: ("<<o.first<<","<<o.second<<")");
 
 			point a = now->twin->origin->pos;
-			LOG("		T-NEIGHBOR: ("<<a.first<<","<<a.second<<")");
 
 			vector2f v1 = (1.0/abs(a-o))*(a-o);
 
@@ -445,14 +435,11 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 				if (incident == now || incident->twin->last != nullptr) continue;
 
 				point p = incident->twin->origin->pos;
-				LOG("		NEIGHBOR: ("<<p.first<<","<<p.second<<")");
 
 				vector2f v2 = (1.0/abs(p-o))*(p-o);
 				int side = aboveTest(v1,v2);
-				LOG("			side: "<<side);
 
 				float angle = ((-1*side)*dot(v1,v2) + 1)/2.0;
-				LOG("			cos(Θ): "<<angle);
 
 
 
@@ -476,16 +463,13 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 
 			now = now->next;
 
-			LOG("	-> ("<<now->origin->pos.first<<","<<now->origin->pos.second<<")");
 			//sleep(1);
 
 			circleSize++;
 		} while (now != loopPoint);
-		LOG("STATE: LINKING COMPLETED. LOOP SIZE "<<circleSize<<"\n");
 	}
 
 	//identify faces
-	LOG("Creating faces!");
 	std::stack<halfedge*> tracer;
 	tracer.push(hedges.front());
 	while (!tracer.empty())
@@ -516,10 +500,7 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 
 	//sanity check
 	if (2 - vertices.size() + (hedges.size()/2) != faces.size())
-	{
-		std::cout<<"Fatal error on creation of faces!!!"<<std::endl;
 		throw std::runtime_error("Couldn't identify faces correctly.");
-	}
 
 }
 
