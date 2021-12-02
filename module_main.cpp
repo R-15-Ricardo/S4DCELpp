@@ -213,6 +213,9 @@ class dcel {
         void splitFace(faceId fId, vertexId u, vertexId v);
         void DeleteInsideNewFace(std::vector<halfedge*> boundNewFace);
 
+        std::pair<faceId, faceId> facesTouchingLine(hedgeId);
+        vertexId isThisAVert(point);
+
         template<class T>
         void RemoveItemFromVec(std::vector<T>& list, T item);
 
@@ -300,6 +303,19 @@ class dcel {
 				boundNewFace.push_back(he);
 			}
             this->DeleteInsideNewFace(boundNewFace);
+        }
+
+        py::tuple IF_facesTouchingLine(hedgeId h)
+        {
+            std::pair<faceId, faceId> result = facesTouchingLine(h);
+            return py::make_tuple(result.first, result.second);
+        }
+
+        py::tuple IF_isThisAVert(float x, float y)
+        {
+            vertexId result = this->isThisAVert(point({x, y}));
+
+            return py::make_tuple(result.loc == nullptr ? false : true, result);
         }
 };
 
@@ -722,6 +738,28 @@ void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
     }
 }
 
+std::pair<faceId, faceId> dcel::facesTouchingLine(hedgeId h)
+{
+    halfedge* e = h.loc;
+
+    return std::pair<faceId, faceId> (faceId({e->bounding}), faceId({e->twin->bounding}));
+}
+
+vertexId dcel::isThisAVert(point p)
+{
+    float x, y, dist;
+    for (auto v : this->vertices)
+    {
+        x    = v->pos.first  - p.first;
+        y    = v->pos.second - p.second;
+        dist = sqrt(x*x + y*y);
+
+        if (dist < 1e-4)
+            return vertexId({v});
+    }
+    return vertexId({nullptr});
+}
+
 
 PYBIND11_MODULE(PyS4DCEL, handle) {
 	handle.doc() = "Cpp DCEL module";
@@ -741,7 +779,9 @@ PYBIND11_MODULE(PyS4DCEL, handle) {
 			.def("split_edge", &dcel::IF_splitEdgeOnPoint)
 			.def("split_face", &dcel::IF_splitFace)
 			.def("delete_interior", &dcel::IF_deleteInsideNewFace)
-			.def_property_readonly("G", &dcel::IF_getGraph);
+			.def_property_readonly("G", &dcel::IF_getGraph)
+            .def("faces_touch_line", &dcel::IF_facesTouchingLine)
+            .def("is_a_vert", &dcel::IF_isThisAVert);
 
 	py::class_<faceId>(handle, "faceId");
 	py::class_<hedgeId>(handle, "edgeId");
