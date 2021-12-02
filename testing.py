@@ -24,7 +24,6 @@ class TestDCEL(unittest.TestCase):
         #points = [(1.58,1.19)]
         for p in points:
             lfid = testdcel.landing_face(p)
-            self.assertNotEqual(lfid,testdcel.no_face,"No landing detected")
 
             lbound = testdcel.get_boundry(lfid)
             print(lbound)
@@ -44,16 +43,26 @@ class TestDCEL(unittest.TestCase):
         fid = testdcel.landing_face(point)
         bound = testdcel.get_boundry(fid)
         intersections = []
+        to_split = []
         for line in bound:
             auxInter = dcel.get_intersection(bisector, line)
             print(type(auxInter))
             if auxInter is not None:
                 print("AAAAA")
                 intersections.append(auxInter)
+                to_split.append(line.on_bound_id)
                 print(intersections)
 
         intersections = np.array(intersections)
         print(intersections)
+
+        print("EEEEE")
+
+        split_point = testdcel.split_edge(tuple(intersections[0]), to_split[0])
+        print(split_point)
+
+        store = testdcel.G
+        print(store)
 
 
 
