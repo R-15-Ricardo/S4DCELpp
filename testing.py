@@ -5,7 +5,7 @@ import PyS4DCEL as dcel
 import numpy as np
 
 class TestDCEL(unittest.TestCase):
-    def test_constructor(self):
+    def test_dcel(self):
         V = [(-7,2),(-4,6),(2,4),(-3,2),(-1,0),(5,-1)]
         E = [(0,1),(1,2),(2,3),(4,3),(5,2),(4,5),(0,3)]
         testdcel = dcel.dcel(V,E)
@@ -22,8 +22,6 @@ class TestDCEL(unittest.TestCase):
 
         points = [(-3.26,3.88),(1.58,1.19),(3.01,6.75)]
         #points = [(1.58,1.19)]
-        nohit = testdcel.no_face
-        print(nohit)
         for p in points:
             lfid = testdcel.landing_face(p)
             self.assertNotEqual(lfid,testdcel.no_face,"No landing detected")
@@ -56,6 +54,8 @@ class TestDCEL(unittest.TestCase):
 
         intersections = np.array(intersections)
         print(intersections)
+
+
 
 
 
