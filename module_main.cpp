@@ -220,6 +220,7 @@ class dcel {
         
         vertex* VertexOnEdge(point x,  hedgeId eId);
         halfedge* splitFace(faceId fId, vertexId u, vertexId v);
+        std::vector<halfedge*> sortLines(std::vector<fullEdge>, point, int);
         void DeleteInsideNewFace(std::vector<halfedge*> boundNewFace);
 
         std::pair<faceId, faceId> facesTouchingLine(hedgeId);
@@ -357,6 +358,10 @@ class dcel {
 
             this->DeleteInsideNewFace(boundNewFace);
         }
+        void IF_deleteInsideNewFace_AlrSort(std::vector<halfedge*> boundry)
+        {
+            this->DeleteInsideNewFace(boundry);
+        }
 
         py::tuple IF_facesTouchingLine(hedgeId h)
         {
@@ -374,6 +379,12 @@ class dcel {
         bool IF_areFacesEqual(faceId f1, faceId f2)
         {
             return this->areFacesEqual(f1, f2);
+        }
+
+
+        std::vector<halfedge*> IF_sortMyLines(std::vector<fullEdge> linesToSort, point hint, int extFace)
+        {
+            return sortLines(linesToSort, hint, extFace);
         }
 };
 
@@ -825,6 +836,75 @@ bool IF_isFaceInsideVec(faceId face_to_check, std::vector<faceId> faces)
     return false;
 }
 
+std::vector<halfedge*> dcel::sortLines(std::vector<fullEdge> lines, point hint, int idx_ext_face)
+{
+    std::vector<halfedge*> sorted;
+
+    halfedge* first_try = lines.back().h1;
+    lines.pop_back();
+
+    point o = first_try->twin->origin->pos;
+    point a = first_try->origin->pos;
+
+    vector2f v1 = a - o;
+    vector2f v2 = hint - o;
+
+    if (aboveTest(v1, v2) > 0)
+        sorted.push_back(first_try->twin);
+    else
+        sorted.push_back(first_try);
+
+
+    halfedge* last_pushed;
+    halfedge* to_push;
+    while (!lines.empty())
+    {
+        last_pushed = sorted.back();
+        to_push     = nullptr;
+
+        for (size_t i = 0; i < lines.size(); i++)
+        {
+            if (last_pushed->origin == lines.at(i).h1->origin)
+            {
+                to_push = lines.at(i).h2;
+                lines.erase(lines.begin() + i);
+                break;
+            }
+            else if (last_pushed->origin == lines.at(i).h2->origin)
+            {
+                to_push = lines.at(i).h1;
+                lines.erase(lines.begin() + i);
+                break;
+            }
+        }
+
+        if (to_push == nullptr)
+        {
+            // Si no encuentra la siguiente media-arista, podríamos estar en el
+            // marco exterior. Busquemos la siguiente arista rodeando el marco.
+            for (auto e : last_pushed->origin->incident)
+            {
+                if (e->twin->bounding == this->faces.at(idx_ext_face))
+                {
+                    to_push = e;
+                    break;
+                }
+            }
+
+            // En caso de no haber encontrado una media-arista rodeando el marco
+            // exterior, no estamos en el marco. Luego nos habrá faltado alguna
+            // línea.
+            if (to_push == nullptr)
+                throw std::runtime_error("Given an incomplete number of lines to divide face.");
+        }
+
+        sorted.push_back(to_push);
+    }
+
+    return sorted;
+}
+
+
 
 PYBIND11_MODULE(PyS4DCEL, handle) {
 	handle.doc() = "Cpp DCEL module";
@@ -850,12 +930,14 @@ PYBIND11_MODULE(PyS4DCEL, handle) {
 			.def("split_face", &dcel::IF_splitFace)
 			.def("split_edge", &dcel::IF_splitEdgeOnPoint)
 			.def("delete_interior", &dcel::IF_deleteInsideNewFace)
+			.def("delete_interior_sorted", &dcel::IF_deleteInsideNewFace_AlrSort)
 			.def_property_readonly("G", &dcel::IF_getGraph)
             .def("faces_touch_line", &dcel::IF_facesTouchingLine)
             .def("is_a_vert", &dcel::IF_isThisAVert)
-            .def("are_faces_eq", &dcel::IF_areFacesEqual);
+            .def("are_faces_eq", &dcel::IF_areFacesEqual)
+            .def("sort_lines", &dcel::IF_sortMyLines);
 
-	py::class_<fullEdge>(handle, "edge");
+	py::class_<fullEdge>(handle, "fullEdge");
 
 	py::class_<faceId>(handle, "faceId");
 	py::class_<hedgeId>(handle, "edgeId");

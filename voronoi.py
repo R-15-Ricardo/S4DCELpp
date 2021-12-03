@@ -4,6 +4,8 @@ from typing import List
 
 import build.PyS4DCEL as pdcl
 
+IDX_EXT_FACE = 0
+
 
 def xtractArguments(args : List[str]):
     if len(args) < 2:
@@ -22,7 +24,9 @@ def xtractArguments(args : List[str]):
 
 def main(sites: np.ndarray):
     # Empezamos definiendo el marco exterior.
-    V = [(-1.2, -1.2), (-1.2,  1.2), ( 1.2,  1.2), ( 1.2, -1.2)]
+    V = [(-1.2, -1.2), ( 1.2, -1.2), ( 1.2,  1.2), (-1.2,  1.2)]
+    # En este orden en particular, la cara de afuera del marco convenientemente
+    # será la del índice 0.
     E = [(0, 1), (1, 2), (2, 3), (3, 0)]
     ourVoronoi = pdcl.dcel(V, E)
 
@@ -40,6 +44,9 @@ def main(sites: np.ndarray):
         # dejen de tocar una arista que toca una cara no explorada.
         facesExplored  = list()
         facesToExplore = list()
+
+        bisectors_of_new_face = list()
+        lines_surround_face = list()
 
         # Siempre comenzamos con la cara en la que cae nuestro nuevo sitio.
         facesToExplore.append(ourVoronoi.landing_face(new_site))
@@ -66,6 +73,7 @@ def main(sites: np.ndarray):
             # Podemos calcular el bisector y guardaremos los datos para, más
             # adelante, poder dividir la cara.
             bisector = pdcl.get_bisector(new_site, landing_site)
+            bisectors_of_new_face.append(bisector)
             bound    = ourVoronoi.get_boundry(fid)
             intersec = []
             to_split = []
@@ -98,9 +106,14 @@ def main(sites: np.ndarray):
                 else:
                     to_join.append(ourVoronoi.split_edge(tuple(p), split[i]))
 
-            ourVoronoi.split_face(f, to_join[0], to_join[1])
+            lines_surround_face.append(ourVoronoi.split_face(f, to_join[0], to_join[1]))
 
         # TODO: Eliminar lo que hay dentro de las caras D:.
+        # lines_surround_face = list(map(pdcl.line.edge_id, bisectors_of_new_face))
+        # lines_surround_face = list(map(lambda x : x.edge_id, bisectors_of_new_face))
+        lines_surround_face = ourVoronoi.sort_lines(lines_surround_face,
+                tuple(new_site), IDX_EXT_FACE)
+        ourVoronoi.delete_interior_sorted(lines_surround_face)
 
         sites_already_visited.append(new_site)
 
