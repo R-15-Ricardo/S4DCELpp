@@ -318,7 +318,9 @@ class dcel {
 
         fullEdge IF_splitFace(faceId fId, vertexId v, vertexId u)
         {
+            LOG("Vamos a partir una cara.");
 			halfedge* piece = this->splitFace(fId,u,v);
+            LOG("Cara partida.");
             return fullEdge({piece,piece->twin});
         }
 
@@ -382,9 +384,19 @@ class dcel {
         }
 
 
-        std::vector<halfedge*> IF_sortMyLines(std::vector<fullEdge> linesToSort, point hint, int extFace)
+        void IF_sortMyLines(std::vector<fullEdge> linesToSort, point hint, int extFace)
         {
-            return sortLines(linesToSort, hint, extFace);
+            std::vector<halfedge*> boundry = sortLines(linesToSort, hint, extFace);
+            /*
+             * LOG("\tCara a eliminar:");
+             * for (auto h : boundry)
+             * {
+             *     LOG(h->twin->origin->pos.first<<", "<<h->twin->origin->pos.second<<"->"<<h->origin->pos.first<<", "<<h->origin->pos.second);
+             * }
+             * //throw std::runtime_error("Antes del desastre.");
+             */
+            this->DeleteInsideNewFace(boundry);
+            LOG("Eliminado lo dentro de la nueva cara.");
         }
 };
 
@@ -671,6 +683,7 @@ halfedge* dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
 	vertex* v = v2.loc;
 
 	face* faceToDelete = fId.loc;
+    //LOG("Inicializando.");
 
 	halfedge* h_1;
 	for (auto incd : u->incident)
@@ -690,6 +703,7 @@ halfedge* dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
 			break;
 		}
 	}
+    //LOG("Ya inicializado.");
 
     face* f_1 = new face;      this->faces.emplace_back(f_1);
     face* f_2 = new face;      this->faces.emplace_back(f_2);
@@ -699,6 +713,7 @@ halfedge* dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
     //vertex* v = h_2->origin;
     //face* faceToDelete = h_1->bounding;
 
+    //LOG("Comenzamos con la primera cara.");
     e_1->origin = v;
     e_2->origin = u;
 
@@ -710,12 +725,15 @@ halfedge* dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
     e_2->origin->incident.emplace_back(e_2);
 
     e_2->next = h_1->next;
+    LOG("Hay un core dump aqui :(.");
     e_2->next->last = e_2;
+    LOG("Ya no llegamos a esto.");
     e_2->last = h_2;
 
 	halfedge* auxh_2next = h_2->next;
     e_2->last->next = e_2;
 
+    //LOG("Matemos todas las referencias a la cara anterior.");
     halfedge* loopStart = e_2;
 	halfedge* loopPtr = loopStart;
 	do {
@@ -724,6 +742,7 @@ halfedge* dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
     } while (loopStart != loopPtr);
 
 
+    //LOG("Continuemos con la segunda cara.");
     e_1->next = auxh_2next;
     e_1->next->last = e_1;
     e_1->last = h_1;
@@ -731,14 +750,17 @@ halfedge* dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
 
 	loopStart = e_1;
 	loopPtr = loopStart;
+    //LOG("Matnado las referencias a la cara anterior nuevamente.");
 	do {
 		loopPtr->bounding = f_1;
 		loopPtr = loopPtr->next;
 	} while (loopStart != loopPtr);
 
+    //LOG("Terminemos por matar la cara anterior.");
     this->RemoveItemFromVec(this->faces, faceToDelete);
 	delete faceToDelete;
 
+    //LOG("Hemos acabado.");
 	return e_1;
 }
 
@@ -748,6 +770,7 @@ void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
     newFace->leader = boundNewFace.at(0);
 
     size_t n = boundNewFace.size();
+    //LOG("Inicio de borrar lo de dentro de una cara.");
 
     boundNewFace.at(0)->last = boundNewFace.at(n - 1);
     boundNewFace.at(0)->next = boundNewFace.at(1);
@@ -758,10 +781,12 @@ void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
     }
     boundNewFace.at(n - 1)->last = boundNewFace.at(n - 2);
     boundNewFace.at(n - 1)->next = boundNewFace.at(0);
+    //LOG("Los next y last se han cambiado exitosamente.");
 
 	std::vector<vertex*> vertexOnBoundry;
 	for (auto he : boundNewFace)
 		vertexOnBoundry.push_back(he->origin);
+    //LOG("Se han guardado los vertices de la nueva futura cara.");
 
     std::vector<vertex*> vertInsideFace;
     for (auto v : this->vertices)
@@ -769,6 +794,7 @@ void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
 		if (this->testInside(v->pos, newFace) && (std::find(vertexOnBoundry.begin(), vertexOnBoundry.end(), v) == vertexOnBoundry.end()))
             vertInsideFace.push_back(v);
 	}
+    //LOG("Se han calculado los vertices dentro de la nueva futura cara.");
 
     for (auto v : vertInsideFace)
 	{
@@ -793,11 +819,13 @@ void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
 		this->RemoveItemFromVec(this->vertices, v);
 		delete v;
 	}
+    //LOG("Se han borrado con exito todos los vertices.");
 
     for (auto newHedg : boundNewFace)
     {
         newHedg->bounding = newFace;
     }
+    //LOG("Nueva cara funciona ahora.");
 }
 
 std::pair<faceId, faceId> dcel::facesTouchingLine(hedgeId h)
@@ -854,6 +882,7 @@ std::vector<halfedge*> dcel::sortLines(std::vector<fullEdge> lines, point hint, 
     else
         sorted.push_back(first_try);
 
+    //LOG(sorted.back()->twin->origin->pos.first<<", "<<sorted.back()->twin->origin->pos.second<<"->"<<sorted.back()->origin->pos.first<<", "<<sorted.back()->origin->pos.second);
 
     halfedge* last_pushed;
     halfedge* to_push;
@@ -884,9 +913,9 @@ std::vector<halfedge*> dcel::sortLines(std::vector<fullEdge> lines, point hint, 
             // marco exterior. Busquemos la siguiente arista rodeando el marco.
             for (auto e : last_pushed->origin->incident)
             {
-                if (e->twin->bounding == this->faces.at(idx_ext_face))
+                if (e != last_pushed && e->bounding == this->faces.at(idx_ext_face))
                 {
-                    to_push = e;
+                    to_push = e->twin;
                     break;
                 }
             }
@@ -899,6 +928,28 @@ std::vector<halfedge*> dcel::sortLines(std::vector<fullEdge> lines, point hint, 
         }
 
         sorted.push_back(to_push);
+    }
+
+    while (sorted.size() == 1 ||
+            sorted.back()->origin != sorted.at(0)->twin->origin)
+    {
+        last_pushed = sorted.back();
+        for (auto e : last_pushed->origin->incident)
+        {
+            if (e != last_pushed && e->bounding == this->faces.at(idx_ext_face))
+            {
+                to_push = e->twin;
+                break;
+            }
+        }
+        if (to_push == nullptr)
+            throw std::runtime_error("Given an incomplete number of lines to divide face.");
+        sorted.push_back(to_push);
+
+        //LOG(sorted.back()->twin->origin->pos.first<<", "<<sorted.back()->twin->origin->pos.second<<"->"<<sorted.back()->origin->pos.first<<", "<<sorted.back()->origin->pos.second);
+
+        if (sorted.size() >= 100)
+            throw std::runtime_error("Something seems wrong. Too many boundary lines.");
     }
 
     return sorted;

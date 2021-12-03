@@ -45,7 +45,6 @@ def main(sites: np.ndarray):
         facesExplored  = list()
         facesToExplore = list()
 
-        bisectors_of_new_face = list()
         lines_surround_face = list()
 
         # Siempre comenzamos con la cara en la que cae nuestro nuevo sitio.
@@ -73,7 +72,6 @@ def main(sites: np.ndarray):
             # Podemos calcular el bisector y guardaremos los datos para, más
             # adelante, poder dividir la cara.
             bisector = pdcl.get_bisector(new_site, landing_site)
-            bisectors_of_new_face.append(bisector)
             bound    = ourVoronoi.get_boundry(fid)
             intersec = []
             to_split = []
@@ -111,9 +109,9 @@ def main(sites: np.ndarray):
         # TODO: Eliminar lo que hay dentro de las caras D:.
         # lines_surround_face = list(map(pdcl.line.edge_id, bisectors_of_new_face))
         # lines_surround_face = list(map(lambda x : x.edge_id, bisectors_of_new_face))
-        lines_surround_face = ourVoronoi.sort_lines(lines_surround_face,
-                tuple(new_site), IDX_EXT_FACE)
-        ourVoronoi.delete_interior_sorted(lines_surround_face)
+        if lines_surround_face:
+            ourVoronoi.sort_lines(lines_surround_face, tuple(new_site), IDX_EXT_FACE)
+        # ourVoronoi.delete_interior_sorted(lines_surround_face)
 
         sites_already_visited.append(new_site)
 
