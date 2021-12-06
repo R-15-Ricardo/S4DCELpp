@@ -5,6 +5,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
+#include <pybind11/operators.h>
 
 #define LOG(A) std::cout<<A<<std::endl
 
@@ -52,80 +53,50 @@ int aboveTest(vector2f a, vector2f b)
 	return (cross(a,b) >= 0) ? 1 : -1;
 }
 
-struct vertex;
-struct face;
-struct halfedge;
-
-struct vertex {
-	point pos;
-	std::vector<halfedge*> incident;
-};
-
-struct face {
-	point data;
-	halfedge* leader = nullptr;
-};
-
-struct halfedge {
-	halfedge* next = nullptr;
-	halfedge* last = nullptr;
-	halfedge* twin = nullptr;
- 	vertex* origin = nullptr;
- 	face* bounding = nullptr;
-};
-
-struct fullEdge {
-	halfedge* h1;
-	halfedge* h2;
-};
-
-struct vertexId {
-	vertex* loc;
-};
-
-struct faceId {
-	face* loc;
-};
-
-struct hedgeId {
-	halfedge* loc;
-};
-
 class line {
-	private:
-		vector2f dir;
-		vector2f origin;
-		int type;
-		hedgeId boundryId;
+private:
+	vector2f dir;
+	vector2f origin;
+	int type;
 
-		friend intersection checkIntersection(line l1,line l2);
-		friend line getBisector (point a, point b);
+	friend intersection checkIntersection(line l1,line l2);
+	line getBisector (point a, point b);
 
-	public:
-		enum lineType {full = 0, segment = 1};
-		line(vector2f origin_, vector2f dir_, std::string type) : dir(dir_), origin(origin_), boundryId({nullptr})
-		{
-			if (type == "full") this->type = lineType::full;
-			else if (type == "segment") this->type = lineType::segment;
-			else
-				throw std::invalid_argument("Non-valid line type");
-		}
+public:
+	enum lineType {full = 0, segment = 1};
+	line(vector2f origin_, vector2f dir_, std::string type) : dir(dir_), origin(origin_)
+	{
+		if (type == "full") this->type = lineType::full;
+		else if (type == "segment") this->type = lineType::segment;
+		else
+			throw std::invalid_argument("Non-valid line type");
+	}
 
-		line(vector2f origin_, vector2f dir_, hedgeId boundId) : dir(dir_), origin(origin_), type(lineType::segment), boundryId(boundId) {};
+	line(vector2f origin_, vector2f dir_) : dir(dir_), origin(origin_), type(lineType::segment) {};
 
-		py::array IF_getDrawable() {
-			return py::cast(std::vector<float>({origin.first,origin.second,dir.first,dir.second}));
-		}
+	py::array IF_getDrawable() {
+		return py::cast(std::vector<float>({origin.first,origin.second,dir.first,dir.second}));
+	}
 
-		hedgeId IF_getHedgeId() {
-			return this->boundryId;
-		}
+	py::tuple IF_getP1 () {
+		return py::cast(this->origin);
+	}
 
-		fullEdge IF_getFullEdge() {
-			return fullEdge({this->boundryId.loc,this->boundryId.loc->twin});
-		}
+	void IF_setP1 (point p) {
+		this->origin = p;
+	}
 
-		friend py::object IF_intersect(line l1,line l2);
+	py::tuple IF_getP2 () {
+		point p2 = this->origin + this->dir;
+		return py::cast(p2);
+	}
+
+	void IF_setP2 (point p) {
+		point newDir = p - this->origin;
+		this->origin = newDir;
+	}
+
+	friend py::object IF_intersect(line l1,line l2);
 };
 
 
@@ -206,6 +177,152 @@ line IF_bisect(point a, point b)
 	return getBisector(a,b);
 }
 
+
+struct vertex;
+struct face;
+struct halfedge;
+
+struct vertex {
+	point pos;
+	std::vector<halfedge*> incident;
+};
+
+struct face {
+	point data = point({10000000000000000,10000000000000000});
+	halfedge* leader = nullptr;
+};
+
+struct halfedge {
+	halfedge* next = nullptr;
+	halfedge* last = nullptr;
+	halfedge* twin = nullptr;
+ 	vertex* origin = nullptr;
+ 	face* bounding = nullptr;
+};
+
+std::vector<halfedge*> getBoundry(face* f)
+{
+	std::vector<halfedge*> boundry;
+
+	halfedge* loopstart = f->leader;
+	boundry.push_back(loopstart);
+
+	halfedge* loopPtr = loopstart->next;
+	while (loopPtr != loopstart)
+	{
+		boundry.push_back(loopPtr);
+		loopPtr = loopPtr->next;
+	}
+
+	return boundry;
+}
+
+struct fullEdge {
+	halfedge* h1;
+	halfedge* h2;
+
+	bool operator==(const fullEdge &other) const {
+		return ((this->h1 == other.h1) && (this->h2 == other.h2) ||
+				(this->h1 == other.h2) && (this->h2 == other.h1));
+	}
+
+	line IF_lineParamRep () {
+		point o = h2->origin->pos;
+		point dir = h1->origin->pos - o;
+		return line(o, dir);
+	}
+};
+
+struct vertexId {
+	vertex* loc;
+
+	bool operator==(const vertexId &other) const {
+		return this->loc == other.loc;
+	}
+
+	py::tuple IF_pos () {
+		return py::make_tuple(loc->pos.first,loc->pos.second);
+	}
+
+};
+
+struct faceId {
+	face* loc;
+
+	bool operator==(const faceId &other) const {
+		return this->loc == other.loc;
+	}
+
+	py::object IF_get_data() {
+		if (this->loc->data == point({10000000000000000,10000000000000000}))
+			return py::none();
+
+		point a = this->loc->data;
+		return py::cast(a);
+	}
+
+	void IF_set_data(point data_) {
+		this->loc->data = data_;
+	}
+
+	std::vector<fullEdge> IF_boundry () {
+		std::vector<fullEdge> out;
+
+		halfedge* loopstart = this->loc->leader;
+		halfedge* loopPtr = loopstart;
+
+		do {
+			out.push_back(fullEdge({loopPtr,loopPtr->twin}));
+			loopPtr = loopPtr->next;
+		} while (loopPtr != loopstart);
+
+		return out;
+	}
+};
+
+struct hedgeId {
+	halfedge* loc;
+
+	bool operator==(const hedgeId &other) const {
+		return this->loc == other.loc;
+	}
+
+	hedgeId IF_next() {
+		return hedgeId({this->loc->next});
+	}
+
+	hedgeId IF_last() {
+		return hedgeId({this->loc->last});
+	}
+
+	hedgeId IF_twin() {
+		return hedgeId({this->loc->twin});
+	}
+
+	faceId IF_bonding() {
+		return faceId({this->loc->bounding});
+	}
+};
+
+bool getWinding(face* f)
+{
+	halfedge* lead = f->leader;
+	point A = lead->last->twin->origin->pos;
+	point B = lead->last->origin->pos;
+	point C = lead->origin->pos;
+
+	vector2f v1 = A-B;
+	vector2f v2 = C-B;
+
+	return (aboveTest(v1,v2) > 0);
+}
+
+bool IF_testCWRotation (faceId fId)
+{
+	return getWinding(fId.loc);
+}
+
+
 class dcel {
 	private:
 		std::vector<vertex*> vertices;
@@ -213,31 +330,27 @@ class dcel {
 		std::vector<halfedge*> hedges;
 
 		void buildFromGraph(std::vector<point> V, std::vector<edge> E);
-		void buildDefault(point a, point b);
-		std::vector<halfedge*> getBoundry(face* f);
 		bool testInside(point p, face* f);
-		bool getWinding(face* f);
         
-        vertex* VertexOnEdge(point x,  hedgeId eId);
+        vertex* VertexOnEdge(point x,  halfedge*);
         halfedge* splitFace(faceId fId, vertexId u, vertexId v);
-        std::vector<halfedge*> sortLines(std::vector<fullEdge>, point, int);
-        void DeleteInsideNewFace(std::vector<halfedge*> boundNewFace);
+        //std::vector<halfedge*> sortLines(std::vector<fullEdge>, point, int);
+		face* getContainerFace(point x);
+		face* mergeFaces(face* f1, face* f2, halfedge* link);
+        void DeleteInsideNewFace(std::vector<fullEdge> boundNewFace, face* hint);
 
-        std::pair<faceId, faceId> facesTouchingLine(hedgeId);
-        vertexId isThisAVert(point);
-        bool areFacesEqual(faceId, faceId);
+        //std::pair<faceId, faceId> facesTouchingLine(hedgeId);
+        //vertexId isThisAVert(point);
+        //bool areFacesEqual(faceId, faceId);
 
         template<class T>
-        void RemoveItemFromVec(std::vector<T>& list, T item);
+        void purge(std::vector<T>& list, T item);
 
 	public:
 
 		dcel(std::vector<point> V, std::vector<edge> E) {
 			buildFromGraph(V,E);
 		}
-//		dcel(point a, point b) {
-//			this->buildDefault(a,b);
-//		}
 
 		//interface
 		py::tuple IF_getGraph ()
@@ -266,16 +379,6 @@ class dcel {
 			return (throught.h1->bounding == f) ? faceId({throught.h2->bounding}) : faceId({throught.h1->bounding});
 		}
 
-		py::array IF_getFaceData(faceId fId)
-		{
-			return py::cast(std::vector<float>({fId.loc->data.first,fId.loc->data.second}));
-		}
-
-		void IF_setFaceData(faceId fId, point newData)
-		{
-			fId.loc->data = newData;
-		}
-
 		faceId IF_getFace (int index)
 		{
 			 if (index >= faces.size())
@@ -284,36 +387,14 @@ class dcel {
 			 return faceId({faces[index]});
 		}
 
-		std::vector<line> IF_getFaceBoundry(faceId faceId)
-		{
-			auto boundry = this->getBoundry(faceId.loc);
-			std::vector<line> hedgeOut;
-
-			for (auto e : boundry)
-			{
-				point o = e->twin->origin->pos;
-				point dir = e->origin->pos - o;
-				hedgeOut.push_back(line(o,dir,hedgeId({e})));
-			}
-			return hedgeOut;
-		}
-
 		faceId IF_getLandingFace(point p)
 		{
-			faceId unwind = {nullptr};
-			for (auto f : faces)
-			{
-				if (testInside(p,f)) return faceId({f});
-
-				if (!getWinding(f)) unwind.loc = f;
-			}
-
-			return unwind;
+			return faceId({this->getContainerFace(p)});
 		}
 
-        vertexId IF_splitEdgeOnPoint(point x, hedgeId eId)
+        vertexId IF_splitEdgeOnPoint(point x, fullEdge eId)
         {
-            return vertexId({this->VertexOnEdge(x, eId)});
+            return vertexId({this->VertexOnEdge(x, eId.h1)});
         }
 
         fullEdge IF_splitFace(faceId fId, vertexId v, vertexId u)
@@ -324,80 +405,71 @@ class dcel {
             return fullEdge({piece,piece->twin});
         }
 
-		std::vector<fullEdge> follow(hedgeId eId)
+		void IF_createNewFace(std::vector<fullEdge> newBound, point p)
 		{
-			halfedge* loopPtr = eId.loc;
-			face* hand = loopPtr->bounding;
-
-			std::vector<fullEdge> lead;
-
-			while (loopPtr->bounding == hand)
-			{
-				lead.push_back(fullEdge({loopPtr, loopPtr->twin}));
-				loopPtr = loopPtr->next;
-			}
-
-			return lead;
+			face* start = this->getContainerFace(p);
+			start->data = p;
+			this->DeleteInsideNewFace(newBound, start);
 		}
 
-        void IF_deleteInsideNewFace(std::vector<fullEdge> boundry, faceId hint)
-        {
-			std::vector<halfedge*> boundNewFace;
+//        void IF_deleteInsideNewFace(std::vector<fullEdge> boundry, faceId hint)
+//        {
+//			std::vector<halfedge*> boundNewFace;
+//
+//			face* nowHint = hint.loc;
+//
+//			for (auto e : boundry)
+//			{
+//				halfedge* choosen;
+//				if (e.h1->bounding == nowHint) choosen = e.h1;
+//				else if (e.h2->bounding == nowHint) choosen = e.h2;
+//				else
+//					throw std::runtime_error("Hint does not match first edge.");
+//
+//				nowHint = choosen->next->twin->bounding;
+//				boundNewFace.push_back(choosen);
+//			}
+//
+//            this->DeleteInsideNewFace(boundNewFace);
+//        }
+//        void IF_deleteInsideNewFace_AlrSort(std::vector<halfedge*> boundry)
+//        {
+//            this->DeleteInsideNewFace(boundry);
+//        }
 
-			face* nowHint = hint.loc;
+//        py::tuple IF_facesTouchingLine(hedgeId h)
+//        {
+//            std::pair<faceId, faceId> result = facesTouchingLine(h);
+//            return py::make_tuple(result.first, result.second);
+//        }
 
-			for (auto e : boundry)
-			{
-				halfedge* choosen;
-				if (e.h1->bounding == nowHint) choosen = e.h1;
-				else if (e.h2->bounding == nowHint) choosen = e.h2;
-				else
-					throw std::runtime_error("Hint does not match first edge.");
+//        py::tuple IF_isThisAVert(float x, float y)
+//        {
+//            vertexId result = this->isThisAVert(point({x, y}));
+//
+//            return py::make_tuple(result.loc == nullptr ? false : true, result);
+//        }
 
-				nowHint = choosen->next->twin->bounding;
-				boundNewFace.push_back(choosen);
-			}
-
-            this->DeleteInsideNewFace(boundNewFace);
-        }
-        void IF_deleteInsideNewFace_AlrSort(std::vector<halfedge*> boundry)
-        {
-            this->DeleteInsideNewFace(boundry);
-        }
-
-        py::tuple IF_facesTouchingLine(hedgeId h)
-        {
-            std::pair<faceId, faceId> result = facesTouchingLine(h);
-            return py::make_tuple(result.first, result.second);
-        }
-
-        py::tuple IF_isThisAVert(float x, float y)
-        {
-            vertexId result = this->isThisAVert(point({x, y}));
-
-            return py::make_tuple(result.loc == nullptr ? false : true, result);
-        }
-
-        bool IF_areFacesEqual(faceId f1, faceId f2)
-        {
-            return this->areFacesEqual(f1, f2);
-        }
+//        bool IF_areFacesEqual(faceId f1, faceId f2)
+//        {
+//            return this->areFacesEqual(f1, f2);
+//        }
 
 
-        void IF_sortMyLines(std::vector<fullEdge> linesToSort, point hint, int extFace)
-        {
-            std::vector<halfedge*> boundry = sortLines(linesToSort, hint, extFace);
-            /*
-             * LOG("\tCara a eliminar:");
-             * for (auto h : boundry)
-             * {
-             *     LOG(h->twin->origin->pos.first<<", "<<h->twin->origin->pos.second<<"->"<<h->origin->pos.first<<", "<<h->origin->pos.second);
-             * }
-             * //throw std::runtime_error("Antes del desastre.");
-             */
-            this->DeleteInsideNewFace(boundry);
-            LOG("Eliminado lo dentro de la nueva cara.");
-        }
+//        void IF_sortMyLines(std::vector<fullEdge> linesToSort, point hint, int extFace)
+//        {
+//            std::vector<halfedge*> boundry = sortLines(linesToSort, hint, extFace);
+//            /*
+//             * LOG("\tCara a eliminar:");
+//             * for (auto h : boundry)
+//             * {
+//             *     LOG(h->twin->origin->pos.first<<", "<<h->twin->origin->pos.second<<"->"<<h->origin->pos.first<<", "<<h->origin->pos.second);
+//             * }
+//             * //throw std::runtime_error("Antes del desastre.");
+//             */
+//            this->DeleteInsideNewFace(boundry);
+//            LOG("Eliminado lo dentro de la nueva cara.");
+//        }
 };
 
 void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
@@ -527,32 +599,9 @@ void dcel::buildFromGraph(std::vector<point> V, std::vector<edge> E)
 
 }
 
-void dcel::buildDefault(point a, point b)
-{
-	std::vector<point> points = {a,b};
-	std::vector<edge> edges = {edge(INFTY,INFTY)};
-}
-
-std::vector<halfedge*> dcel::getBoundry(face* f)
-{
-	std::vector<halfedge*> boundry;
-
-	halfedge* loopstart = f->leader;
-	boundry.push_back(loopstart);
-
-	halfedge* loopPtr = loopstart->next;
-	while (loopPtr != loopstart)
-	{
-		boundry.push_back(loopPtr);
-		loopPtr = loopPtr->next;
-	}
-
-	return boundry;
-}
-
 bool dcel::testInside(point p, face* f)
 {
-	auto boundry = this->getBoundry(f);
+	auto boundry = getBoundry(f);
 
 	for (auto e : boundry)
 	{
@@ -570,22 +619,9 @@ bool dcel::testInside(point p, face* f)
 	return true;
 }
 
-bool dcel::getWinding(face* f)
-{
-	halfedge* lead = f->leader;
-	point A = lead->last->twin->origin->pos;
-	point B = lead->last->origin->pos;
-	point C = lead->origin->pos;
-
-	vector2f v1 = A-B;
-	vector2f v2 = C-B;
-
-	return (aboveTest(v1,v2) > 0);
-}
-
 // Operaciones con el DCEL
 template<typename T>
-void dcel::RemoveItemFromVec(std::vector<T>& list, T item)
+void dcel::purge(std::vector<T>& list, T item)
 {
     for (auto nowV = list.begin(); nowV != list.end(); nowV++)
         if(*nowV == item)
@@ -596,10 +632,8 @@ void dcel::RemoveItemFromVec(std::vector<T>& list, T item)
         }
 }
 
-vertex* dcel::VertexOnEdge(point x, hedgeId eId)
+vertex* dcel::VertexOnEdge(point x, halfedge* e)
 {
-	halfedge* e = eId.loc;
-
 	//non-duplicate vertices
 	if (abs(e->origin->pos - x) < 0.000000000001)
 		return e->origin;
@@ -629,7 +663,7 @@ vertex* dcel::VertexOnEdge(point x, hedgeId eId)
     e->next->last = new_hed_2;
 
 	new_hed_2->origin->incident.emplace_back(new_hed_2);
-    this->RemoveItemFromVec(e->origin->incident, e);
+    this->purge(e->origin->incident, e);
 
 
     halfedge* e_twin = e->twin;
@@ -653,7 +687,7 @@ vertex* dcel::VertexOnEdge(point x, hedgeId eId)
     e_twin->next->last = twi_hed_2;
 
 	twi_hed_2->origin->incident.emplace_back(twi_hed_2);
-    this->RemoveItemFromVec(e_twin->origin->incident, e_twin);
+    this->purge(e_twin->origin->incident, e_twin);
 
 
 	new_hed_1->twin = twi_hed_2;
@@ -667,8 +701,8 @@ vertex* dcel::VertexOnEdge(point x, hedgeId eId)
     if (e_twin->bounding->leader == e_twin)
         e_twin->bounding->leader = twi_hed_1;
 
-    this->RemoveItemFromVec(this->hedges, e);
-    this->RemoveItemFromVec(this->hedges, e_twin);
+    this->purge(this->hedges, e);
+    this->purge(this->hedges, e_twin);
 
 	delete e;
 	delete e_twin;
@@ -757,203 +791,318 @@ halfedge* dcel::splitFace(faceId fId, vertexId v1, vertexId v2)
 	} while (loopStart != loopPtr);
 
     //LOG("Terminemos por matar la cara anterior.");
-    this->RemoveItemFromVec(this->faces, faceToDelete);
+    this->purge(this->faces, faceToDelete);
 	delete faceToDelete;
 
     //LOG("Hemos acabado.");
 	return e_1;
 }
 
-void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
+face* dcel::getContainerFace(point x)
 {
-    face* newFace = new face;      this->faces.emplace_back(newFace);
-    newFace->leader = boundNewFace.at(0);
-
-    size_t n = boundNewFace.size();
-    //LOG("Inicio de borrar lo de dentro de una cara.");
-
-    boundNewFace.at(0)->last = boundNewFace.at(n - 1);
-    boundNewFace.at(0)->next = boundNewFace.at(1);
-    for (size_t i = 1; i < n - 1; i++)
-    {
-        boundNewFace.at(i)->last = boundNewFace.at(i - 1);
-        boundNewFace.at(i)->next = boundNewFace.at(i + 1);
-    }
-    boundNewFace.at(n - 1)->last = boundNewFace.at(n - 2);
-    boundNewFace.at(n - 1)->next = boundNewFace.at(0);
-    //LOG("Los next y last se han cambiado exitosamente.");
-
-	std::vector<vertex*> vertexOnBoundry;
-	for (auto he : boundNewFace)
-		vertexOnBoundry.push_back(he->origin);
-    //LOG("Se han guardado los vertices de la nueva futura cara.");
-
-    std::vector<vertex*> vertInsideFace;
-    for (auto v : this->vertices)
+	face* unwind = nullptr;
+	for (auto f : faces)
 	{
-		if (this->testInside(v->pos, newFace) && (std::find(vertexOnBoundry.begin(), vertexOnBoundry.end(), v) == vertexOnBoundry.end()))
-            vertInsideFace.push_back(v);
-	}
-    //LOG("Se han calculado los vertices dentro de la nueva futura cara.");
+		if (testInside(x,f)) return f;
 
-    for (auto v : vertInsideFace)
+		if (!getWinding(f)) unwind = f;
+	}
+
+	return unwind;
+}
+
+face* dcel::mergeFaces(face* f1, face* f2, halfedge* link)
+{
+	if (!((link->bounding == f1 && link->twin->bounding == f2) ||
+		  (link->bounding == f2 && link->twin->bounding == f1))) {
+		std::cout<<"Faces aren't touching"<<std::endl;
+		return nullptr;
+	}
+
+	halfedge* loopStart = link->last;
+
+	link->last->next = link->twin->next;
+	link->twin->next->last = link->last;
+
+	link->next->last = link->twin->last;
+	link->twin->last->next = link->next;
+
+	this->purge(link->twin->origin->incident, link->twin);
+	this->purge(link->origin->incident, link);
+
+	this->purge(this->hedges, link->twin);
+	this->purge(this->hedges, link);
+
+	delete link->twin;
+	delete link;
+
+	face* newFace = new face;
+	newFace->data = f1->data;
+
+	this->purge(this->faces, f1);
+	this->purge(this->faces, f2);
+
+	//delete f1;
+	//delete f2;
+
+	this->faces.emplace_back(newFace);
+
+	newFace->leader = loopStart;
+	loopStart->bounding = newFace;
+
+	halfedge* loopPtr = loopStart->next;
+	while (loopPtr != loopStart)
 	{
-        for (auto h : v->incident)
-        {
-			halfedge* up = h;
-			halfedge* down = h->twin;
-			face* upBound = up->bounding;
-
-			if (std::find(vertexOnBoundry.begin(), vertexOnBoundry.end(), down->origin) != vertexOnBoundry.end())
-				this->RemoveItemFromVec(down->origin->incident, down);
-
-			this->RemoveItemFromVec(this->hedges, up);
-			this->RemoveItemFromVec(this->faces, upBound);
-			this->RemoveItemFromVec(this->hedges, down);
-
-			delete upBound;
-			delete up;
-			delete down;
-        }
-
-		this->RemoveItemFromVec(this->vertices, v);
-		delete v;
+		loopPtr->bounding = newFace;
+		loopPtr = loopPtr->next;
 	}
-    //LOG("Se han borrado con exito todos los vertices.");
 
-    for (auto newHedg : boundNewFace)
-    {
-        newHedg->bounding = newFace;
-    }
-    //LOG("Nueva cara funciona ahora.");
+	return newFace;
 }
 
-std::pair<faceId, faceId> dcel::facesTouchingLine(hedgeId h)
+void dcel::DeleteInsideNewFace(std::vector<fullEdge> boundNewFace, face* hint)
 {
-    halfedge* e = h.loc;
+	std::stack<face*> marked;
+	marked.push(hint);
 
-    return std::pair<faceId, faceId> (faceId({e->bounding}), faceId({e->twin->bounding}));
+	while (!marked.empty())
+	{
+		face* merger = marked.top();
+		marked.pop();
+
+		std::stack<halfedge*> toMerge;
+
+		auto boundry = getBoundry(merger);
+		for (auto e : boundry)
+		{
+			bool add = true;
+			for (auto fe : boundNewFace)
+			{
+				if (fe.h1 == e || fe.h2 == e)
+				{
+					add = false;
+					break;
+				}
+			}
+			if (!getWinding(e->twin->bounding)) add = false;
+
+			if (add) toMerge.push(e);
+		}
+		if (toMerge.empty()) break;
+
+		while (!toMerge.empty())
+		{
+			halfedge* nowLink = toMerge.top();
+			toMerge.pop();
+			face* facePair = nowLink->twin->bounding;
+
+			merger = this->mergeFaces(merger, facePair, nowLink);
+		}
+
+		if (merger != nullptr)
+			marked.push(merger);
+	}
+
+	for (auto v : this->vertices)
+	{
+		if (v->incident.empty())
+		{
+			this->purge(this->vertices, v);
+			delete v;
+		}
+	}
 }
 
-vertexId dcel::isThisAVert(point p)
-{
-    float x, y, dist;
-    for (auto v : this->vertices)
-    {
-        x    = v->pos.first  - p.first;
-        y    = v->pos.second - p.second;
-        dist = sqrt(x*x + y*y);
+//void dcel::DeleteInsideNewFace(std::vector<halfedge*> boundNewFace)
+//{
+//    face* newFace = new face;      this->faces.emplace_back(newFace);
+//    newFace->leader = boundNewFace.at(0);
+//
+//    size_t n = boundNewFace.size();
+//    //LOG("Inicio de borrar lo de dentro de una cara.");
+//
+//    boundNewFace.at(0)->last = boundNewFace.at(n - 1);
+//    boundNewFace.at(0)->next = boundNewFace.at(1);
+//    for (size_t i = 1; i < n - 1; i++)
+//    {
+//        boundNewFace.at(i)->last = boundNewFace.at(i - 1);
+//        boundNewFace.at(i)->next = boundNewFace.at(i + 1);
+//    }
+//    boundNewFace.at(n - 1)->last = boundNewFace.at(n - 2);
+//    boundNewFace.at(n - 1)->next = boundNewFace.at(0);
+//    //LOG("Los next y last se han cambiado exitosamente.");
+//
+//	std::vector<vertex*> vertexOnBoundry;
+//	for (auto he : boundNewFace)
+//		vertexOnBoundry.push_back(he->origin);
+//    //LOG("Se han guardado los vertices de la nueva futura cara.");
+//
+//    std::vector<vertex*> vertInsideFace;
+//    for (auto v : this->vertices)
+//	{
+//		if (this->testInside(v->pos, newFace) && (std::find(vertexOnBoundry.begin(), vertexOnBoundry.end(), v) == vertexOnBoundry.end()))
+//            vertInsideFace.push_back(v);
+//	}
+//    //LOG("Se han calculado los vertices dentro de la nueva futura cara.");
+//
+//    for (auto v : vertInsideFace)
+//	{
+//        for (auto h : v->incident)
+//        {
+//			halfedge* up = h;
+//			halfedge* down = h->twin;
+//			face* upBound = up->bounding;
+//
+//			if (std::find(vertexOnBoundry.begin(), vertexOnBoundry.end(), down->origin) != vertexOnBoundry.end())
+//				this->purge(down->origin->incident, down);
+//
+//			this->purge(this->hedges, up);
+//			this->purge(this->faces, upBound);
+//			this->purge(this->hedges, down);
+//
+//			delete upBound;
+//			delete up;
+//			delete down;
+//        }
+//
+//		this->purge(this->vertices, v);
+//		delete v;
+//	}
+//    //LOG("Se han borrado con exito todos los vertices.");
+//
+//    for (auto newHedg : boundNewFace)
+//    {
+//        newHedg->bounding = newFace;
+//    }
+//    //LOG("Nueva cara funciona ahora.");
+//}
 
-        if (dist < 1e-4)
-            return vertexId({v});
-    }
-    return vertexId({nullptr});
-}
+//std::pair<faceId, faceId> dcel::facesTouchingLine(hedgeId h)
+//{
+//    halfedge* e = h.loc;
+//
+//    return std::pair<faceId, faceId> (faceId({e->bounding}), faceId({e->twin->bounding}));
+//}
 
-bool dcel::areFacesEqual(faceId f1, faceId f2)
-{
-    return f1.loc == f2.loc;
-}
+//vertexId dcel::isThisAVert(point p)
+//{
+//    float x, y, dist;
+//    for (auto v : this->vertices)
+//    {
+//        x    = v->pos.first  - p.first;
+//        y    = v->pos.second - p.second;
+//        dist = sqrt(x*x + y*y);
+//
+//        if (dist < 1e-4)
+//            return vertexId({v});
+//    }
+//    return vertexId({nullptr});
+//}
 
-bool IF_isFaceInsideVec(faceId face_to_check, std::vector<faceId> faces)
-{
-    for (auto f : faces)
-        if (face_to_check.loc == f.loc)
-            return true;
+//bool dcel::areFacesEqual(faceId f1, faceId f2)
+//{
+//    return f1.loc == f2.loc;
+//}
 
-    return false;
-}
+//bool IF_isFaceInsideVec(faceId face_to_check, std::vector<faceId> faces)
+//{
+//    for (auto f : faces)
+//        if (face_to_check.loc == f.loc)
+//            return true;
+//
+//    return false;
+//}
 
-std::vector<halfedge*> dcel::sortLines(std::vector<fullEdge> lines, point hint, int idx_ext_face)
-{
-    std::vector<halfedge*> sorted;
-
-    halfedge* first_try = lines.back().h1;
-    lines.pop_back();
-
-    point o = first_try->twin->origin->pos;
-    point a = first_try->origin->pos;
-
-    vector2f v1 = a - o;
-    vector2f v2 = hint - o;
-
-    if (aboveTest(v1, v2) > 0)
-        sorted.push_back(first_try->twin);
-    else
-        sorted.push_back(first_try);
-
-    //LOG(sorted.back()->twin->origin->pos.first<<", "<<sorted.back()->twin->origin->pos.second<<"->"<<sorted.back()->origin->pos.first<<", "<<sorted.back()->origin->pos.second);
-
-    halfedge* last_pushed;
-    halfedge* to_push;
-    while (!lines.empty())
-    {
-        last_pushed = sorted.back();
-        to_push     = nullptr;
-
-        for (size_t i = 0; i < lines.size(); i++)
-        {
-            if (last_pushed->origin == lines.at(i).h1->origin)
-            {
-                to_push = lines.at(i).h2;
-                lines.erase(lines.begin() + i);
-                break;
-            }
-            else if (last_pushed->origin == lines.at(i).h2->origin)
-            {
-                to_push = lines.at(i).h1;
-                lines.erase(lines.begin() + i);
-                break;
-            }
-        }
-
-        if (to_push == nullptr)
-        {
-            // Si no encuentra la siguiente media-arista, podríamos estar en el
-            // marco exterior. Busquemos la siguiente arista rodeando el marco.
-            for (auto e : last_pushed->origin->incident)
-            {
-                if (e != last_pushed && e->bounding == this->faces.at(idx_ext_face))
-                {
-                    to_push = e->twin;
-                    break;
-                }
-            }
-
-            // En caso de no haber encontrado una media-arista rodeando el marco
-            // exterior, no estamos en el marco. Luego nos habrá faltado alguna
-            // línea.
-            if (to_push == nullptr)
-                throw std::runtime_error("Given an incomplete number of lines to divide face.");
-        }
-
-        sorted.push_back(to_push);
-    }
-
-    while (sorted.size() == 1 ||
-            sorted.back()->origin != sorted.at(0)->twin->origin)
-    {
-        last_pushed = sorted.back();
-        for (auto e : last_pushed->origin->incident)
-        {
-            if (e != last_pushed && e->bounding == this->faces.at(idx_ext_face))
-            {
-                to_push = e->twin;
-                break;
-            }
-        }
-        if (to_push == nullptr)
-            throw std::runtime_error("Given an incomplete number of lines to divide face.");
-        sorted.push_back(to_push);
-
-        //LOG(sorted.back()->twin->origin->pos.first<<", "<<sorted.back()->twin->origin->pos.second<<"->"<<sorted.back()->origin->pos.first<<", "<<sorted.back()->origin->pos.second);
-
-        if (sorted.size() >= 100)
-            throw std::runtime_error("Something seems wrong. Too many boundary lines.");
-    }
-
-    return sorted;
-}
+//std::vector<halfedge*> dcel::sortLines(std::vector<fullEdge> lines, point hint, int idx_ext_face)
+//{
+//    std::vector<halfedge*> sorted;
+//
+//    halfedge* first_try = lines.back().h1;
+//    lines.pop_back();
+//
+//    point o = first_try->twin->origin->pos;
+//    point a = first_try->origin->pos;
+//
+//    vector2f v1 = a - o;
+//    vector2f v2 = hint - o;
+//
+//    if (aboveTest(v1, v2) > 0)
+//        sorted.push_back(first_try->twin);
+//    else
+//        sorted.push_back(first_try);
+//
+//    //LOG(sorted.back()->twin->origin->pos.first<<", "<<sorted.back()->twin->origin->pos.second<<"->"<<sorted.back()->origin->pos.first<<", "<<sorted.back()->origin->pos.second);
+//
+//    halfedge* last_pushed;
+//    halfedge* to_push;
+//    while (!lines.empty())
+//    {
+//        last_pushed = sorted.back();
+//        to_push     = nullptr;
+//
+//        for (size_t i = 0; i < lines.size(); i++)
+//        {
+//            if (last_pushed->origin == lines.at(i).h1->origin)
+//            {
+//                to_push = lines.at(i).h2;
+//                lines.erase(lines.begin() + i);
+//                break;
+//            }
+//            else if (last_pushed->origin == lines.at(i).h2->origin)
+//            {
+//                to_push = lines.at(i).h1;
+//                lines.erase(lines.begin() + i);
+//                break;
+//            }
+//        }
+//
+//        if (to_push == nullptr)
+//        {
+//            // Si no encuentra la siguiente media-arista, podríamos estar en el
+//            // marco exterior. Busquemos la siguiente arista rodeando el marco.
+//            for (auto e : last_pushed->origin->incident)
+//            {
+//                if (e != last_pushed && e->bounding == this->faces.at(idx_ext_face))
+//                {
+//                    to_push = e->twin;
+//                    break;
+//                }
+//            }
+//
+//            // En caso de no haber encontrado una media-arista rodeando el marco
+//            // exterior, no estamos en el marco. Luego nos habrá faltado alguna
+//            // línea.
+//            if (to_push == nullptr)
+//                throw std::runtime_error("Given an incomplete number of lines to divide face.");
+//        }
+//
+//        sorted.push_back(to_push);
+//    }
+//
+//    while (sorted.size() == 1 ||
+//            sorted.back()->origin != sorted.at(0)->twin->origin)
+//    {
+//        last_pushed = sorted.back();
+//        for (auto e : last_pushed->origin->incident)
+//        {
+//            if (e != last_pushed && e->bounding == this->faces.at(idx_ext_face))
+//            {
+//                to_push = e->twin;
+//                break;
+//            }
+//        }
+//        if (to_push == nullptr)
+//            throw std::runtime_error("Given an incomplete number of lines to divide face.");
+//        sorted.push_back(to_push);
+//
+//        //LOG(sorted.back()->twin->origin->pos.first<<", "<<sorted.back()->twin->origin->pos.second<<"->"<<sorted.back()->origin->pos.first<<", "<<sorted.back()->origin->pos.second);
+//
+//        if (sorted.size() >= 100)
+//            throw std::runtime_error("Something seems wrong. Too many boundary lines.");
+//    }
+//
+//    return sorted;
+//}
 
 
 
@@ -961,36 +1110,50 @@ PYBIND11_MODULE(PyS4DCEL, handle) {
 	handle.doc() = "Cpp DCEL module";
 	handle.def("get_bisector", &IF_bisect);
 	handle.def("get_intersection", &IF_intersect);
-	handle.def("is_face_inside_list", &IF_isFaceInsideVec);
+	handle.def("isCW",&IF_testCWRotation);
+	//handle.def("is_face_inside_list", &IF_isFaceInsideVec);
 
 	py::class_<line>( handle, "line" )
 	        .def(py::init<vector2f, vector2f, std::string>())
-			.def_property_readonly("drawable", &line::IF_getDrawable)
-			.def_property_readonly("edge_id", &line::IF_getFullEdge)
-			.def_property_readonly("on_bound_id", &line::IF_getHedgeId);
+			.def_property("P1", &line::IF_getP1, &line::IF_setP1)
+			.def_property("P2", &line::IF_getP2, &line::IF_setP2)
+			.def_property_readonly("drawable", &line::IF_getDrawable);
 
 	py::class_<dcel>( handle, "dcel" )
 	        .def(py::init<std::vector<point>, std::vector<edge>>())
 			.def("get_face", &dcel::IF_getFace)
-			.def("step_over_edge", &dcel::IF_traverseFace)
-			.def("set_face_data", &dcel::IF_setFaceData)
-			.def("get_face_data", &dcel::IF_getFaceData)
-			.def("get_boundry", &dcel::IF_getFaceBoundry)
+			.def("step_over_edge", &dcel::IF_traverseFace) //
+			//.def("get_boundry", &dcel::IF_getFaceBoundry)
 			.def("landing_face", &dcel::IF_getLandingFace)
-			.def("follow_edge", &dcel::follow)
+			//.def("follow_edge", &dcel::follow)
 			.def("split_face", &dcel::IF_splitFace)
 			.def("split_edge", &dcel::IF_splitEdgeOnPoint)
-			.def("delete_interior", &dcel::IF_deleteInsideNewFace)
-			.def("delete_interior_sorted", &dcel::IF_deleteInsideNewFace_AlrSort)
-			.def_property_readonly("G", &dcel::IF_getGraph)
-            .def("faces_touch_line", &dcel::IF_facesTouchingLine)
-            .def("is_a_vert", &dcel::IF_isThisAVert)
-            .def("are_faces_eq", &dcel::IF_areFacesEqual)
-            .def("sort_lines", &dcel::IF_sortMyLines);
+			.def("delete_interior", &dcel::IF_createNewFace)
+			//.def("delete_interior_sorted", &dcel::IF_deleteInsideNewFace_AlrSort)
+			.def_property_readonly("G", &dcel::IF_getGraph);
+            //.def("faces_touch_line", &dcel::IF_facesTouchingLine)
+            //.def("is_a_vert", &dcel::IF_isThisAVert)
+            //.def("are_faces_eq", &dcel::IF_areFacesEqual)
+            //.def("sort_lines", &dcel::IF_sortMyLines);
 
-	py::class_<fullEdge>(handle, "fullEdge");
+	py::class_<vertexId>(handle, "vertexId")
+	        .def(py::self == py::self)
+			.def_property_readonly("pos", &vertexId::IF_pos);
 
-	py::class_<faceId>(handle, "faceId");
-	py::class_<hedgeId>(handle, "edgeId");
-	py::class_<vertexId>(handle, "vertexId");
+	py::class_<hedgeId>(handle, "edgeId")
+			.def(py::self == py::self)
+			.def_property_readonly("next", &hedgeId::IF_next)
+			.def_property_readonly("last", &hedgeId::IF_last)
+			.def_property_readonly("twin", &hedgeId::IF_twin)
+			.def_property_readonly("bounding", &hedgeId::IF_bonding);
+
+	py::class_<faceId>(handle, "faceId")
+			.def(py::self == py::self)
+			.def_property_readonly("boundry", &faceId::IF_boundry)
+	        .def_property("data", &faceId::IF_get_data, &faceId::IF_set_data);
+
+	py::class_<fullEdge>(handle, "fullEdge")
+	        .def(py::self == py::self)
+			.def_property_readonly("line", &fullEdge::IF_lineParamRep);
+
 }

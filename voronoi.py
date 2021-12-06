@@ -1,8 +1,9 @@
 import numpy as np
 import sys
+sys.path.append("/home/ric/Documents/Escuela/7mo_semestre/CompGeo/Tarea3/Modules/PyS4DCEL/S4DCELpp/cmake-build-debug")
 from typing import List
 
-import build.PyS4DCEL as pdcl
+import PyS4DCEL as pdcl
 
 IDX_EXT_FACE = 0
 

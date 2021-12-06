@@ -99,20 +99,19 @@ class TestDCEL(unittest.TestCase):
             interseccions = []
 
             fid = test2.landing_face(landings[i])
-            bound = test2.get_boundry(fid)
-            for line in bound:
-                inter = dcel.get_intersection(lines[i],line)
+            bound = fid.boundry
+            for edge in bound:
+                inter = dcel.get_intersection(lines[i],edge.line)
                 if inter is not None:
                     if len(to_join) == 0:
                         interseccions.append(tuple(inter))
-                        to_join.append(test2.split_edge(tuple(inter),line.on_bound_id))
+                        to_join.append(test2.split_edge(tuple(inter),edge))
                     elif interseccions[-1] != tuple(inter):
                         interseccions.append(tuple(inter))
-                        to_join.append(test2.split_edge(tuple(inter),line.on_bound_id))
+                        to_join.append(test2.split_edge(tuple(inter),edge))
             new_face.append(test2.split_face(fid,to_join[0],to_join[1]))
 
-        hint = test2.get_face(1)
-        test2.delete_interior(new_face,hint)
+        test2.delete_interior(new_face,(-1,1.5))
 
         store = test2.G
         for arrow in store[1]:
