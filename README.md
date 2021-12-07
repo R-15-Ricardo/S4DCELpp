@@ -1,30 +1,53 @@
 # S4DCELpp
-DCEL Python module on cpp.
+DCEL Python module built with [pybind11](https://github.com/pybind/pybind11)
+
+## Instalation
+### Instaltion with pip
+* Clone this repository
+* `pip install ./S4DCELpp`
+
+### Build and instalation with cmake
+* Clone this repository
+* Create `build` directory
+* `cmake [path to repo]`
+* `make`
 
 # Usage
-Build with on extern directory with CMAKELists.txt. 
-Add:
-```python
-import sys
-sys.path.append("[repoPath]/S4DCELpp/cmake-build-debug")
-```
-to python source and import with `import PyS4DCEL`
 
-# TODO *(cpp class)*:
-  * [X] DCEL from graph constructor
-  * [X] DCEL default from two points
-  * [ ] Handle points to infinity
-  * [X] `dcel::getFace(point p)` method implementation
-  * [X] `dcel::getBoundry(face* f)` method implementation
-  * [ ] `dcel::splitEdge(halfedge* e)` method implementation
-  * [ ] `dcel::joinVertex(vertex* a, vertex* b)` method implementation
-  * [ ] `dcel::splitFace(face* f)` method implementation
-  * [X] Create line class
-  * [ ] Line class intersect
-  
-# TODO *(pybind11 interface)*
-  * [X] Constructors
-  * [X] read-only property `vertices`
-  * [X] read-only property `edges`
-  * [X] read-only property `graph` *(for debug)*
-  * [X] read-only property `faces`
+On python src, import with 
+```python
+import PyS4DCEL
+```
+
+## Clases
+* `PyS4DCEL.dcel`
+* `PyS4DCEL.line`
+* `PyS4DCEL.vertexId`
+* `PyS4DCEL.edgeId`
+* `PyS4DCEL.faceId`
+* `PyS4DCEL.fullEdge`
+
+
+## Functions
+* `PyS4DCEL.get_bisector(l1 : tuple, l2 : tuple) -> PyS4DCEL.line`
+* `PyS4DCEL.get_intersection(l1 : PyS4DCEL.line, l2 : PyS4DCEL.line) -> tuple`
+* `PyS4DCEL.isCW(f : PyS4DCEL.faceId) -> bool`
+
+# Example
+```python
+import PyS4DCEL as pdcl
+import matplotlib.pyplot as plt
+
+def draw_dcel(G: tuple()):
+    for arrow in G[1]:
+        plt.arrow(arrow[0],arrow[1],arrow[2],arrow[3],head_width=0.07,length_includes_head=True,shape='left')
+    plt.scatter(G[0].T[0],G[0].T[1])
+    plt.show()
+
+V = [(-4,4),(4,4),(4,-4),(-4,-4),(0,0)]
+E = [(0,1),(1,2),(2,3),(3,0),(4,0),(4,1),(4,2),(4,3)]
+
+myDcel = pdcl.dcel(V,E)
+draw_dcel(myDcel.G)
+```
+

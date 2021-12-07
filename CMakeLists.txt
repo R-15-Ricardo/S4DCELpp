@@ -5,4 +5,4 @@ set(CMAKE_CXX_STANDARD 11)
 
 add_subdirectory(vendor/pybind11)
 
-pybind11_add_module(PyS4DCEL module_main.cpp)
+pybind11_add_module(PyS4DCEL src/module_main.cpp)

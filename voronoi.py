@@ -1,11 +1,53 @@
 import numpy as np
 import sys
-sys.path.append("/home/ric/Documents/Escuela/7mo_semestre/CompGeo/Tarea3/Modules/PyS4DCEL/S4DCELpp/cmake-build-debug")
+
 from typing import List
+import matplotlib.pyplot as plt
 
 import PyS4DCEL as pdcl
 
-IDX_EXT_FACE = 0
+def draw_voronoi(G: tuple()):
+    for arrow in G[1]:
+        plt.arrow(arrow[0],arrow[1],arrow[2],arrow[3],head_width=0.07,length_includes_head=True,shape='left')
+    plt.scatter(G[0].T[0],G[0].T[1])
+    plt.scatter(sites.T[0],sites.T[1])
+    plt.show()
+
+def draw_face(G: tuple(), face):
+    bound = face.boundry
+
+    for edge in bound:
+        arrow = edge.line.drawable
+        plt.arrow(arrow[0],arrow[1],arrow[2],arrow[3],head_width=0.07,length_includes_head=True,shape='left')
+    plt.scatter(G[0].T[0],G[0].T[1])
+    plt.scatter(sites.T[0],sites.T[1])
+    plt.show()
+
+def draw_bisector(G: tuple(), line, new_site, landing_site):
+    for arrow in G[1]:
+        plt.arrow(arrow[0],arrow[1],arrow[2],arrow[3],head_width=0.07,length_includes_head=True,shape='left')
+    plt.scatter(G[0].T[0],G[0].T[1])
+    plt.scatter(sites.T[0],sites.T[1])
+    plt.scatter(new_site[0],new_site[1],color="magenta")
+    plt.scatter(landing_site[0],landing_site[1],color="green")
+
+    arrow = line.drawable
+    plt.arrow(arrow[0],arrow[1],arrow[2],arrow[3],head_width=0.00001,length_includes_head=True,shape='left')
+
+    plt.show()
+
+def draw_intersection(G: tuple(), face, intersect):
+    bound = face.boundry
+
+    for edge in bound:
+        arrow = edge.line.drawable
+        plt.arrow(arrow[0],arrow[1],arrow[2],arrow[3],head_width=0.07,length_includes_head=True,shape='left')
+    plt.scatter(G[0].T[0],G[0].T[1])
+    plt.scatter(sites.T[0],sites.T[1])
+    plt.scatter(intersect[0],intersect[1],color="red")
+
+    plt.show()
+
 
 
 def xtractArguments(args : List[str]):
@@ -25,47 +67,57 @@ def xtractArguments(args : List[str]):
 
 def main(sites: np.ndarray):
     # Empezamos definiendo el marco exterior.
-    V = [(-1.2, -1.2), ( 1.2, -1.2), ( 1.2,  1.2), (-1.2,  1.2)]
-    # En este orden en particular, la cara de afuera del marco convenientemente
-    # será la del índice 0.
+    V = [(-1.2, -1.2), (-1.2,  1.2), ( 1.2,  1.2), ( 1.2, -1.2)]
     E = [(0, 1), (1, 2), (2, 3), (3, 0)]
     ourVoronoi = pdcl.dcel(V, E)
 
+    draw_voronoi(ourVoronoi.G)
+
+    canvas = ourVoronoi.get_face(0)
+    canvasBound = canvas.boundry
+
     # Supondremos que el primer sitio le pertenece TODA la cara del marco.
-    sites_already_visited = list()
-    sites_already_visited.append(sites[0])
+    initLine = pdcl.get_bisector(tuple(sites[0]),tuple(sites[1]))
+
+    to_join = []
+
+    for edge in canvasBound:
+        inter = pdcl.get_intersection(initLine,edge.line)
+        if inter is not None:
+            to_join.append(ourVoronoi.split_edge(tuple(inter),edge))
+    ourVoronoi.split_face(canvas,to_join[0],to_join[1])
+
+    div1 = ourVoronoi.landing_face(sites[0])
+    div2 = ourVoronoi.landing_face(sites[1])
+    div1.data = sites[0]
+    div2.data = sites[1]
+
+    draw_voronoi(ourVoronoi.G)
+
+    #return ourVoronoi.G
 
     # Por cada nuevo sitio, actualizaremos el diagrama de Voronoi.
-    for i in range(1, len(sites)):
+    for i in range(2, len(sites)):
         new_site        = sites[i]
-        faces_to_divide = dict()
+        faces_to_divide = list()
 
         # Conforme encntremos las intersecciones usando bisectores, guardaremos
         # las caras vecinas. Esto lo repetiremos hasta que las intersecciones
         # dejen de tocar una arista que toca una cara no explorada.
-        facesExplored  = list()
         facesToExplore = list()
+        facesExplored = list()
 
-        lines_surround_face = list()
 
         # Siempre comenzamos con la cara en la que cae nuestro nuevo sitio.
         facesToExplore.append(ourVoronoi.landing_face(new_site))
 
+        print("circleing")
+
+        shift = None
+
         while facesToExplore:
             fid = facesToExplore.pop()
-            facesExplored.append(fid)
-            landing_site = None
-
-            # Buscaremos a cuál sitio le pertenecía la cara anteriormente.
-            for sit in sites_already_visited:
-                if ourVoronoi.are_faces_eq(ourVoronoi.landing_face(sit), fid):
-                    landing_site = sit
-                    break
-            # TODO: Lo anterior no es muy eficiente. ¿Habrá alguna manera de guardar
-            # el sitio de Voronoi para cada cara? Es necesario ir actualizando la
-            # cara a la que pertenece cada sitio.
-            # TODO: No toma ninguna cara cuando un vértice está justo encima de una
-            # arista.
+            landing_site = fid.data
 
             if landing_site is None:
                 continue
@@ -73,54 +125,64 @@ def main(sites: np.ndarray):
             # Podemos calcular el bisector y guardaremos los datos para, más
             # adelante, poder dividir la cara.
             bisector = pdcl.get_bisector(new_site, landing_site)
-            bound    = ourVoronoi.get_boundry(fid)
+
+            if shift is not None:
+                bisector.P1 = shift
+
+            draw_bisector(ourVoronoi.G, bisector, new_site, landing_site)
+            bound    = fid.boundry
+            all_intersec = []
             intersec = []
             to_split = []
-            for line in bound:
-                aux = pdcl.get_intersection(bisector, line)
-                
+            for edge in bound:
+                aux = pdcl.get_intersection(bisector, edge.line)
+
                 if aux is not None:
+                    draw_intersection(ourVoronoi.G, fid, aux)
                     intersec.append(aux)
-                    to_split.append(line.on_bound_id)
+                    all_intersec.append(aux)
+                    to_split.append(edge)
 
-                    face_a, face_b = ourVoronoi.faces_touch_line(line.on_bound_id)
-                    if not pdcl.is_face_inside_list(face_a, facesToExplore + facesExplored):
-                        facesToExplore.append(face_a)
-                    if not pdcl.is_face_inside_list(face_b, facesToExplore + facesExplored):
-                        facesToExplore.append(face_b)
+                    next = ourVoronoi.step_over_edge(fid, edge)
 
-            faces_to_divide[fid] = (intersec[:], to_split[:])
+                    if pdcl.isCW(next) and aux not in all_intersec:
+                        shift = tuple(aux)
+                        facesToExplore.append(next)
 
-        # Ahora haremos todas las divisiones de todas las caras.
-        for f, (inter, split) in faces_to_divide.items():
+
+            faces_to_divide.append((fid,intersec[:], to_split[:]))
+            shift = None
+
+        # Ahora haremos todas las divisiones de todas las caras
+
+        print("slicing")
+        new_face = []
+        for f, inter, split in faces_to_divide:
             to_join = []
 
-            for i, p in enumerate(inter):
-                isAVert, vertId = ourVoronoi.is_a_vert(p[0], p[1])
+            for i in range(len(split)):
+                to_join.append(ourVoronoi.split_edge(tuple(inter[i]), split[i]))
+                draw_voronoi(ourVoronoi.G)
 
-                # En caso de que el vértice que intentamos crear, ya existe,
-                # simplemente lo tomamos sin crear uno nuevo.
-                if isAVert:
-                    to_join.append(vertId)
-                else:
-                    to_join.append(ourVoronoi.split_edge(tuple(p), split[i]))
+            new_face.append(ourVoronoi.split_face(f, to_join[0], to_join[1]))
 
-            lines_surround_face.append(ourVoronoi.split_face(f, to_join[0], to_join[1]))
+        draw_voronoi(ourVoronoi.G)
 
         # TODO: Eliminar lo que hay dentro de las caras D:.
-        # lines_surround_face = list(map(pdcl.line.edge_id, bisectors_of_new_face))
-        # lines_surround_face = list(map(lambda x : x.edge_id, bisectors_of_new_face))
-        if lines_surround_face:
-            ourVoronoi.sort_lines(lines_surround_face, tuple(new_site), IDX_EXT_FACE)
-        # ourVoronoi.delete_interior_sorted(lines_surround_face)
-
-        sites_already_visited.append(new_site)
+        print("punching the hole")
+        ourVoronoi.delete_interior(new_face,new_site)
 
     return ourVoronoi.G
 
 
 if __name__ == "__main__":
     sites = xtractArguments(sys.argv)
+    #plt.scatter(sites.T[0],sites.T[1])
 
-    main(sites)
+    voronoi = main(sites)
+    for arrow in voronoi[1]:
+        plt.arrow(arrow[0],arrow[1],arrow[2],arrow[3],head_width=0.07,length_includes_head=True,shape='left')
+    plt.scatter(voronoi[0].T[0],voronoi[0].T[1])
+    plt.scatter(sites.T[0],sites.T[1])
+    plt.show()
 
