@@ -7,7 +7,7 @@ DCEL Python module built with [pybind11](https://github.com/pybind/pybind11)
 
 or
 
-* Download the latest release and install with `pip install ./PyDCEL-[latest]`
+* Download the [latest release](https://github.com/R-15-Ricardo/S4DCELpp/releases/tag/v0.2.1) and install with `pip install ./PyDCEL-[latest]`
 
 ### Build and instalation with cmake
 * Clone this repository
