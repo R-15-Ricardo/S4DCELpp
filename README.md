@@ -1,5 +1,5 @@
 # S4DCELpp
-DCEL Python module built with [pybind11](https://github.com/pybind/pybind11)
+Dynamic DCEL Python module built with [pybind11](https://github.com/pybind/pybind11)
 
 ## Instalation
 ### Instaltion with pip
